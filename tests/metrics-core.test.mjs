@@ -1,0 +1,195 @@
+import { strict as assert } from 'node:assert';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import os from 'node:os';
+import path from 'node:path';
+import {
+  HEADERS,
+  extractRouteResultsFromReport,
+  readTable,
+  stringifyCsv,
+  updateMetrics,
+} from '../src/metrics-core.mjs';
+
+describe('E2E CI metrics core', () => {
+  it('derives route id from spec file and full title path', () => {
+    const repo = createTempRepo();
+    const report = writeReport(repo, 'macos-report.json', sampleReport({ finalStatus: 'passed' }));
+
+    const results = extractRouteResultsFromReport(report, {
+      platform: 'macos',
+      artifactUrl: 'https://github.com/AOE-HQ/aoe-desktop/actions/runs/1',
+    });
+
+    assert.equal(results.length, 1);
+    assert.deepEqual(pick(results[0], ['spec_file', 'spec_basename', 'title_path', 'route_id', 'outcome', 'platform', 'project']), {
+      spec_file: 'tests/e2e/specs/chat-input.spec.ts',
+      spec_basename: 'chat-input.spec.ts',
+      title_path: 'composer behavior > sends with keyboard',
+      route_id: 'tests/e2e/specs/chat-input.spec.ts :: composer behavior > sends with keyboard',
+      outcome: 'passed',
+      platform: 'macos',
+      project: 'electron',
+    });
+  });
+
+  it('aggregates platform failures, flaky runs, and raw attempt failures', () => {
+    const repo = createTempRepo();
+    const macosReport = writeReport(
+      repo,
+      'electron-macos.json',
+      sampleReport({
+        status: 'flaky',
+        results: [
+          { status: 'failed', retry: 0, duration: 10, errors: [{ message: 'Error: first attempt failed' }] },
+          { status: 'passed', retry: 1, duration: 12, errors: [] },
+        ],
+      }),
+    );
+    const windowsReport = writeReport(
+      repo,
+      'electron-windows.json',
+      sampleReport({
+        status: 'unexpected',
+        results: [{ status: 'failed', retry: 0, duration: 20, errors: [{ message: 'Error: windows failed' }] }],
+      }),
+    );
+
+    updateMetrics({
+      repoRoot: repo,
+      reports: [
+        { platform: 'macos', path: macosReport },
+        { platform: 'windows', path: windowsReport },
+      ],
+      run: baseRun(),
+      artifactUrl: 'https://github.com/AOE-HQ/aoe-desktop/actions/runs/123',
+    });
+
+    const results = readTable(path.join(repo, 'data', 'route_results.csv'), HEADERS.routeResults);
+    const stats = readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats);
+
+    assert.equal(results.length, 2);
+    assert.deepEqual(results.map((row) => `${row.platform}:${row.outcome}`).sort(), ['macos:flaky', 'windows:failed']);
+    assert.equal(stats.length, 1);
+    assert.deepEqual(
+      pick(stats[0], [
+        'total_runs',
+        'failed_runs',
+        'flaky_runs',
+        'attempt_failures',
+        'pass_rate',
+        'failed_runs_macos',
+        'failed_runs_windows',
+        'last_outcome',
+        'last_failed_at',
+        'top_error_signature',
+      ]),
+      {
+      total_runs: '2',
+      failed_runs: '1',
+      flaky_runs: '1',
+      attempt_failures: '2',
+      pass_rate: '0.5000',
+      failed_runs_macos: '0',
+      failed_runs_windows: '1',
+      last_outcome: 'failed',
+      last_failed_at: '2026-07-07T12:00:00.000Z',
+      top_error_signature: 'Error: first attempt failed',
+      },
+    );
+  });
+
+  it('applies module tag overrides and current-run updates are idempotent', () => {
+    const repo = createTempRepo();
+    const routeId = 'tests/e2e/specs/chat-input.spec.ts :: composer behavior > sends with keyboard';
+    mkdirSync(path.join(repo, 'config'), { recursive: true });
+    writeFileSync(
+      path.join(repo, 'config', 'route-module-overrides.csv'),
+      stringifyCsv(HEADERS.overrides, [{ route_id: routeId, module_tags: 'chat;keyboard-shortcuts', note: 'manual' }]),
+      'utf8',
+    );
+    const report = writeReport(repo, 'electron-macos.json', sampleReport({ finalStatus: 'passed' }));
+
+    const update = () =>
+      updateMetrics({
+        repoRoot: repo,
+        reports: [{ platform: 'macos', path: report }],
+        run: baseRun(),
+      });
+
+    update();
+    update();
+
+    const routes = readTable(path.join(repo, 'data', 'routes.csv'), HEADERS.routes);
+    const results = readTable(path.join(repo, 'data', 'route_results.csv'), HEADERS.routeResults);
+
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].module_tags, 'chat;keyboard-shortcuts');
+    assert.equal(results.length, 1);
+  });
+});
+
+function pick(object, keys) {
+  return Object.fromEntries(keys.map((key) => [key, object[key]]));
+}
+
+function createTempRepo() {
+  return mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-metrics-test-'));
+}
+
+function writeReport(directory, filename, data) {
+  const filePath = path.join(directory, filename);
+  writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+  return filePath;
+}
+
+function baseRun() {
+  return {
+    run_id: '123',
+    run_attempt: '1',
+    run_number: '45',
+    workflow: 'CI',
+    branch: 'feature/e2e',
+    sha: 'abcdef',
+    event: 'pull_request',
+    pr_number: '99',
+    started_at: '2026-07-07T11:00:00.000Z',
+    completed_at: '2026-07-07T12:00:00.000Z',
+    conclusion: 'failure',
+  };
+}
+
+function sampleReport({ status = 'expected', finalStatus = 'passed', results } = {}) {
+  const testResults = results ?? [{ status: finalStatus, retry: 0, duration: 33, errors: [] }];
+  return {
+    config: {
+      projects: [{ id: 'electron', name: 'electron' }],
+    },
+    suites: [
+      {
+        title: 'tests/e2e/specs/chat-input.spec.ts',
+        file: 'tests/e2e/specs/chat-input.spec.ts',
+        suites: [
+          {
+            title: 'composer behavior',
+            file: 'tests/e2e/specs/chat-input.spec.ts',
+            specs: [
+              {
+                title: 'sends with keyboard',
+                file: 'tests/e2e/specs/chat-input.spec.ts',
+                tests: [
+                  {
+                    projectId: 'electron',
+                    projectName: 'electron',
+                    status,
+                    results: testResults,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
