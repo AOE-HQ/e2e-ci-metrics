@@ -25,6 +25,7 @@ export const HEADERS = {
     'started_at',
     'completed_at',
     'conclusion',
+    'data_source',
   ],
   routeResults: [
     'run_id',
@@ -38,11 +39,14 @@ export const HEADERS = {
     'attempt_failures',
     'error_signature',
     'artifact_url',
+    'data_source',
   ],
   routeStats: [
     'route_id',
     'module_tags',
     'total_runs',
+    'full_runs',
+    'log_signal_runs',
     'failed_runs',
     'flaky_runs',
     'attempt_failures',
@@ -58,6 +62,8 @@ export const HEADERS = {
     'platform',
     'module_tags',
     'total_runs',
+    'full_runs',
+    'log_signal_runs',
     'failed_runs',
     'flaky_runs',
     'attempt_failures',
@@ -70,6 +76,8 @@ export const HEADERS = {
 };
 
 const FAILED_ATTEMPT_STATUSES = new Set(['failed', 'timedOut', 'interrupted']);
+export const ARTIFACT_JSON_SOURCE = 'artifact_json';
+export const JOB_LOG_FAILURE_SOURCE = 'job_log_failure_summary';
 
 const MODULE_TAG_RULES = [
   ['automation', ['automation-*', 'floatboat-calendar-*', 'task-copy-*']],
@@ -346,6 +354,7 @@ export function extractRouteResultsFromReport(reportPath, { platform, artifactUr
           attempt_failures: String(attemptSummary.attemptFailures),
           error_signature: attemptSummary.errorSignature,
           artifact_url: artifactUrl,
+          data_source: ARTIFACT_JSON_SOURCE,
         });
       }
     });
@@ -354,19 +363,93 @@ export function extractRouteResultsFromReport(reportPath, { platform, artifactUr
   return results;
 }
 
-export function updateMetrics({ repoRoot, reports, run, artifactUrl = '' }) {
+export function extractRouteResultsFromJobLog(logText, { platform, artifactUrl = '' } = {}) {
+  const lines = String(logText ?? '')
+    .replace(/\x1B\[[0-9;]*m/g, '')
+    .split(/\r?\n/)
+    .map(normalizeGithubLogLine);
+  const detailErrors = collectJobLogErrorSignatures(lines);
+  const results = [];
+  const seen = new Set();
+  let currentOutcome = '';
+  let remaining = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const summary = trimmed.match(/^(\d+)\s+(failed|flaky)\b/i);
+    if (summary) {
+      currentOutcome = summary[2].toLowerCase() === 'failed' ? 'failed' : 'flaky';
+      remaining = Number(summary[1]);
+      continue;
+    }
+
+    if (/^\d+\s+(passed|skipped|did not run|interrupted|timed out)\b/i.test(trimmed)) {
+      currentOutcome = '';
+      remaining = 0;
+      continue;
+    }
+
+    if (!currentOutcome || remaining <= 0) {
+      continue;
+    }
+
+    const parsed = parsePlaywrightTestLine(line);
+    if (!parsed || parsed.project !== 'electron') {
+      continue;
+    }
+
+    const routeId = buildRouteId(parsed.specFile, parsed.titlePath);
+    const dedupeKey = `${platform}\0${currentOutcome}\0${routeId}`;
+    if (seen.has(dedupeKey)) {
+      remaining -= 1;
+      continue;
+    }
+    seen.add(dedupeKey);
+
+    results.push({
+      platform,
+      project: parsed.project,
+      route_id: routeId,
+      spec_file: parsed.specFile,
+      spec_basename: path.posix.basename(parsed.specFile),
+      title_path: parsed.titlePath,
+      outcome: currentOutcome,
+      duration_ms: '',
+      retry_count: currentOutcome === 'flaky' ? '1' : '0',
+      attempt_failures: '1',
+      error_signature: detailErrors.get(routeId) ?? '',
+      artifact_url: artifactUrl,
+      data_source: JOB_LOG_FAILURE_SOURCE,
+    });
+
+    remaining -= 1;
+    if (remaining <= 0) {
+      currentOutcome = '';
+    }
+  }
+
+  return results;
+}
+
+export function updateMetrics({ repoRoot, reports = [], results = [], run, artifactUrl = '' }) {
   ensureTables(repoRoot);
 
   const overrides = loadOverrides(repoRoot);
-  const extractedResults = reports.flatMap((report) =>
-    extractRouteResultsFromReport(report.path, {
-      platform: report.platform,
-      artifactUrl: report.artifactUrl ?? artifactUrl,
-    }),
-  );
+  const extractedResults = [
+    ...reports.flatMap((report) =>
+      extractRouteResultsFromReport(report.path, {
+        platform: report.platform,
+        artifactUrl: report.artifactUrl ?? artifactUrl,
+      }),
+    ),
+    ...results.map(normalizeExtractedResult),
+  ];
 
   const runKey = getRunKey(run);
-  const runRow = normalizeRun(run);
+  const runRow = normalizeRun({
+    ...run,
+    data_source: run.data_source ?? summarizeDataSources(extractedResults),
+  });
 
   const runsPath = path.join(repoRoot, 'data', 'runs.csv');
   const routeResultsPath = path.join(repoRoot, 'data', 'route_results.csv');
@@ -394,6 +477,7 @@ export function updateMetrics({ repoRoot, reports, run, artifactUrl = '' }) {
       attempt_failures: result.attempt_failures,
       error_signature: result.error_signature,
       artifact_url: result.artifact_url,
+      data_source: result.data_source,
     })),
   ].sort(compareRouteResultRows);
 
@@ -526,7 +610,7 @@ function firstErrorSignature(results) {
   return '';
 }
 
-function normalizeErrorSignature(message) {
+export function normalizeErrorSignature(message) {
   return String(message)
     .split('\n')[0]
     .replace(/\x1B\[[0-9;]*m/g, '')
@@ -534,6 +618,100 @@ function normalizeErrorSignature(message) {
     .replace(/[A-Z]:\\[^\s)]+/g, '<path>')
     .replace(/\/[^ \t:)]+/g, '<path>')
     .slice(0, 240);
+}
+
+function collectJobLogErrorSignatures(lines) {
+  const errors = new Map();
+  let currentRouteId = '';
+
+  for (const line of lines) {
+    const parsed = parsePlaywrightTestLine(line);
+    if (/^\s*\d+\)\s+\[/.test(line) && parsed?.project === 'electron') {
+      currentRouteId = buildRouteId(parsed.specFile, parsed.titlePath);
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (!currentRouteId) {
+      continue;
+    }
+    if (/^\d+\)\s+\[/.test(trimmed) || /^\d+\s+(failed|flaky|passed|skipped|did not run)\b/i.test(trimmed)) {
+      currentRouteId = '';
+      continue;
+    }
+    if (errors.has(currentRouteId)) {
+      continue;
+    }
+
+    const signature = extractJobLogErrorSignature(trimmed);
+    if (signature) {
+      errors.set(currentRouteId, signature);
+    }
+  }
+
+  return errors;
+}
+
+function extractJobLogErrorSignature(line) {
+  if (!line) {
+    return '';
+  }
+
+  if (
+    /^(Error|TimeoutError|AssertionError|TypeError|ReferenceError|SyntaxError|RangeError):\s*/.test(line) ||
+    /^expect\(.+\)\./.test(line)
+  ) {
+    return normalizeErrorSignature(line);
+  }
+
+  return '';
+}
+
+function parsePlaywrightTestLine(line) {
+  const match = line.match(/^\s*(?:\d+\)\s*)?\[([^\]]+)\]\s+›\s+(.+?\.spec\.ts):\d+:\d+\s+›\s+(.+?)\s*$/);
+  if (!match) {
+    return null;
+  }
+
+  const specFile = path.posix.basename(normalizeSpecFile(match[2]));
+  return {
+    project: match[1],
+    specFile,
+    titlePath: match[3]
+      .split(/\s+›\s+/)
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .join(' > '),
+  };
+}
+
+function normalizeGithubLogLine(line) {
+  return String(line ?? '').replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s?/, '');
+}
+
+function normalizeExtractedResult(result) {
+  const specFile = normalizeSpecFile(result.spec_file ?? result.specFile ?? '');
+  const titlePath = String(result.title_path ?? result.titlePath ?? '');
+  return {
+    platform: String(result.platform ?? ''),
+    project: String(result.project ?? 'electron'),
+    route_id: String(result.route_id ?? result.routeId ?? buildRouteId(specFile, titlePath)),
+    spec_file: specFile,
+    spec_basename: String(result.spec_basename ?? result.specBasename ?? path.posix.basename(specFile)),
+    title_path: titlePath,
+    outcome: String(result.outcome ?? ''),
+    duration_ms: String(result.duration_ms ?? result.durationMs ?? ''),
+    retry_count: String(result.retry_count ?? result.retryCount ?? ''),
+    attempt_failures: String(result.attempt_failures ?? result.attemptFailures ?? ''),
+    error_signature: String(result.error_signature ?? result.errorSignature ?? ''),
+    artifact_url: String(result.artifact_url ?? result.artifactUrl ?? ''),
+    data_source: String(result.data_source ?? result.dataSource ?? ARTIFACT_JSON_SOURCE),
+  };
+}
+
+function summarizeDataSources(results) {
+  const sources = [...new Set(results.map((result) => result.data_source).filter(Boolean))].sort();
+  return sources.join(';');
 }
 
 function mergeRoutes({ existingRoutes, extractedResults, completedAt, overrides }) {
@@ -574,20 +752,26 @@ function computeRouteStats({ routes, routeResults, runs }) {
   const stats = [];
   for (const [routeId, results] of grouped) {
     const nonSkipped = results.filter((result) => result.outcome !== 'skipped');
+    const fullNonSkipped = nonSkipped.filter(isFullObservation);
+    const logSignals = nonSkipped.filter(isLogSignal);
     const failed = results.filter((result) => result.outcome === 'failed');
     const flaky = results.filter((result) => result.outcome === 'flaky');
+    const fullFailed = fullNonSkipped.filter((result) => result.outcome === 'failed');
     const latest = [...results].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const latestFailed = [...failed].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const totalRuns = nonSkipped.length;
+    const fullRuns = fullNonSkipped.length;
 
     stats.push({
       route_id: routeId,
       module_tags: routeById.get(routeId)?.module_tags ?? '',
       total_runs: String(totalRuns),
+      full_runs: String(fullRuns),
+      log_signal_runs: String(logSignals.length),
       failed_runs: String(failed.length),
       flaky_runs: String(flaky.length),
       attempt_failures: String(sum(results.map((result) => Number(result.attempt_failures || 0)))),
-      pass_rate: totalRuns === 0 ? '' : ((totalRuns - failed.length) / totalRuns).toFixed(4),
+      pass_rate: fullRuns === 0 ? '' : ((fullRuns - fullFailed.length) / fullRuns).toFixed(4),
       failed_runs_macos: String(failed.filter((result) => result.platform === 'macos').length),
       failed_runs_windows: String(failed.filter((result) => result.platform === 'windows').length),
       last_outcome: latest?.outcome ?? '',
@@ -617,21 +801,27 @@ export function computeRoutePlatformStats({ routes, routeResults, runs }) {
     const routeId = results[0]?.route_id ?? '';
     const platform = results[0]?.platform ?? '';
     const nonSkipped = results.filter((result) => result.outcome !== 'skipped');
+    const fullNonSkipped = nonSkipped.filter(isFullObservation);
+    const logSignals = nonSkipped.filter(isLogSignal);
     const failed = results.filter((result) => result.outcome === 'failed');
     const flaky = results.filter((result) => result.outcome === 'flaky');
+    const fullFailed = fullNonSkipped.filter((result) => result.outcome === 'failed');
     const latest = [...results].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const latestFailed = [...failed].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const totalRuns = nonSkipped.length;
+    const fullRuns = fullNonSkipped.length;
 
     stats.push({
       route_id: routeId,
       platform,
       module_tags: routeById.get(routeId)?.module_tags ?? '',
       total_runs: String(totalRuns),
+      full_runs: String(fullRuns),
+      log_signal_runs: String(logSignals.length),
       failed_runs: String(failed.length),
       flaky_runs: String(flaky.length),
       attempt_failures: String(sum(results.map((result) => Number(result.attempt_failures || 0)))),
-      pass_rate: totalRuns === 0 ? '' : ((totalRuns - failed.length) / totalRuns).toFixed(4),
+      pass_rate: fullRuns === 0 ? '' : ((fullRuns - fullFailed.length) / fullRuns).toFixed(4),
       last_outcome: latest?.outcome ?? '',
       last_failed_at: latestFailed ? (runByKey.get(getRunKey(latestFailed))?.completed_at ?? '') : '',
       top_error_signature: topErrorSignature(results),
@@ -639,6 +829,15 @@ export function computeRoutePlatformStats({ routes, routeResults, runs }) {
   }
 
   return stats.sort((a, b) => a.route_id.localeCompare(b.route_id) || a.platform.localeCompare(b.platform));
+}
+
+function isFullObservation(result) {
+  const source = result.data_source || ARTIFACT_JSON_SOURCE;
+  return source === ARTIFACT_JSON_SOURCE;
+}
+
+function isLogSignal(result) {
+  return result.data_source === JOB_LOG_FAILURE_SOURCE;
 }
 
 function normalizeRun(run) {
@@ -654,6 +853,7 @@ function normalizeRun(run) {
     started_at: String(run.started_at ?? run.startedAt ?? ''),
     completed_at: String(run.completed_at ?? run.completedAt ?? new Date().toISOString()),
     conclusion: String(run.conclusion ?? ''),
+    data_source: String(run.data_source ?? run.dataSource ?? ''),
   };
 }
 

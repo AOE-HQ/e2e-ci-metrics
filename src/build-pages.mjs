@@ -141,7 +141,7 @@ function buildIndexHtml() {
 
       .scoreboard {
         display: grid;
-        grid-template-columns: repeat(5, minmax(120px, 1fr));
+        grid-template-columns: repeat(6, minmax(120px, 1fr));
         gap: 10px;
       }
 
@@ -568,7 +568,7 @@ function buildIndexHtml() {
       <header>
         <div>
           <h1>AoE Desktop E2E CI Metrics</h1>
-          <p class="subtitle">Route-level Playwright E2E outcomes from AoE Desktop GitHub CI, with platform-specific aggregation for macOS and Windows.</p>
+          <p class="subtitle">Route-level Playwright E2E outcomes from AoE Desktop GitHub CI. JSON artifacts provide full pass-rate observations; expired-artifact failures are recovered from macOS and Windows job logs as failure signals.</p>
         </div>
         <nav class="actions" aria-label="CSV downloads">
           <a class="button" href="data/routes.csv">routes</a>
@@ -581,11 +581,12 @@ function buildIndexHtml() {
 
       <section class="hero-grid">
         <div class="scoreboard" aria-label="Summary metrics">
-          <div class="metric"><div class="metric-label">Imported Runs</div><div id="metric-runs" class="metric-value">...</div><div id="metric-runs-note" class="metric-note">Loading</div></div>
-          <div class="metric"><div class="metric-label">Route Observations</div><div id="metric-observations" class="metric-value">...</div><div class="metric-note">per run and platform</div></div>
+          <div class="metric"><div class="metric-label">CI Runs</div><div id="metric-runs" class="metric-value">...</div><div id="metric-runs-note" class="metric-note">Loading</div></div>
+          <div class="metric"><div class="metric-label">Full Observations</div><div id="metric-observations" class="metric-value">...</div><div class="metric-note">artifact JSON rows</div></div>
+          <div class="metric"><div class="metric-label">Log Signals</div><div id="metric-log-signals" class="metric-value">...</div><div class="metric-note">failure-only recovery</div></div>
           <div class="metric"><div class="metric-label">Failing Routes</div><div id="metric-failing" class="metric-value">...</div><div class="metric-note">final failures</div></div>
           <div class="metric"><div class="metric-label">Flaky Routes</div><div id="metric-flaky" class="metric-value">...</div><div class="metric-note">retry recovered</div></div>
-          <div class="metric"><div class="metric-label">Avg Pass Rate</div><div id="metric-pass-rate" class="metric-value">...</div><div class="metric-note">weighted by observations</div></div>
+          <div class="metric"><div class="metric-label">Full Pass Rate</div><div id="metric-pass-rate" class="metric-value">...</div><div class="metric-note">artifact JSON only</div></div>
         </div>
         <section class="panel" style="margin-top: 0">
           <div class="panel-heading">
@@ -599,7 +600,7 @@ function buildIndexHtml() {
       <section class="panel">
         <div class="panel-heading">
           <h2>Platform Health</h2>
-          <span class="muted">macOS and Windows are aggregated independently</span>
+          <span class="muted">pass rate uses full artifact rows; failures also include log-recovered signals</span>
         </div>
         <div id="platform-cards" class="platform-grid"></div>
       </section>
@@ -665,7 +666,7 @@ function buildIndexHtml() {
 
       <section class="panel">
         <div class="panel-heading">
-          <h2>Imported Runs</h2>
+          <h2>CI Runs</h2>
           <span id="run-count" class="muted">Loading</span>
         </div>
         <div class="table-wrap">
@@ -677,6 +678,7 @@ function buildIndexHtml() {
                 <th>Workflow</th>
                 <th>Branch</th>
                 <th>Event</th>
+                <th>Source</th>
                 <th>Started</th>
                 <th>Completed</th>
                 <th>Conclusion</th>
@@ -803,20 +805,23 @@ function buildIndexHtml() {
 
       function renderSummary(manifest) {
         const totalRoutes = state.stats.length;
-        const totalObservations = state.results.length;
+        const fullObservations = state.results.filter((row) => isFullResult(row) && row.outcome !== 'skipped').length;
+        const logSignals = state.results.filter(isLogSignal).length;
         const failingRoutes = state.stats.filter((row) => number(row.failed_runs) > 0).length;
         const flakyRoutes = state.stats.filter((row) => number(row.flaky_runs) > 0).length;
-        const totalNonSkipped = sum(state.stats.map((row) => number(row.total_runs)));
-        const totalFailures = sum(state.stats.map((row) => number(row.failed_runs)));
-        const passRate = totalNonSkipped ? (totalNonSkipped - totalFailures) / totalNonSkipped : 0;
+        const fullFailures = state.results.filter((row) => isFullResult(row) && row.outcome === 'failed').length;
+        const passRate = fullObservations ? (fullObservations - fullFailures) / fullObservations : null;
         const lastRun = latestRun();
+        const fullRuns = state.runs.filter((run) => String(run.data_source || '').includes('artifact_json')).length;
+        const logRuns = state.runs.filter((run) => String(run.data_source || '').includes('job_log_failure_summary')).length;
 
         setText('metric-runs', state.runs.length);
-        setText('metric-runs-note', totalRoutes + ' stable routes imported');
-        setText('metric-observations', totalObservations);
+        setText('metric-runs-note', fullRuns + ' full · ' + logRuns + ' log recovered');
+        setText('metric-observations', fullObservations);
+        setText('metric-log-signals', logSignals);
         setText('metric-failing', failingRoutes);
         setText('metric-flaky', flakyRoutes);
-        setText('metric-pass-rate', formatPercent(passRate));
+        setText('metric-pass-rate', passRate === null ? 'n/a' : formatPercent(passRate));
         setText('generated-at', 'Generated ' + formatDateTime(manifest.generated_at));
         renderLatestRun(lastRun);
       }
@@ -832,6 +837,7 @@ function buildIndexHtml() {
           '<div class="metric-label">Run #' + escapeHtml(run.run_number || run.run_id) + '</div>' +
           '<div class="metric-value status ' + escapeAttr(run.conclusion) + '">' + escapeHtml(run.conclusion || 'unknown') + '</div>' +
           '<div class="metric-note">' + escapeHtml(run.branch || 'unknown branch') + ' · ' + escapeHtml(run.event || 'unknown event') + '</div>' +
+          '<div class="metric-note">Source ' + escapeHtml(formatSource(run.data_source)) + '</div>' +
           '<div class="metric-note">Completed ' + formatDateTime(run.completed_at) + '</div>';
       }
 
@@ -846,18 +852,18 @@ function buildIndexHtml() {
 
       function renderPlatformCard(platform, summary) {
         const observed = summary.passed + summary.flaky + summary.failed + summary.skipped;
-        const passRate = summary.total ? (summary.total - summary.failed) / summary.total : 0;
+        const passRate = summary.fullTotal ? (summary.fullTotal - summary.fullFailed) / summary.fullTotal : null;
         return (
           '<article class="platform-card">' +
-          '<div class="platform-title"><strong>' + platformLabel(platform) + '</strong><span class="pill ' + healthClass(summary) + '">' + formatPercent(passRate) + '</span></div>' +
+          '<div class="platform-title"><strong>' + platformLabel(platform) + '</strong><span class="pill ' + healthClass(summary) + '">' + (passRate === null ? 'n/a' : formatPercent(passRate)) + '</span></div>' +
           renderOutcomeBar(summary, observed) +
           '<div class="platform-stats">' +
-          miniStat('Passed', summary.passed) +
+          miniStat('Passed', summary.fullPassed) +
           miniStat('Flaky', summary.flaky) +
           miniStat('Failed', summary.failed) +
-          miniStat('Skipped', summary.skipped) +
+          miniStat('Log', summary.logSignals) +
           '</div>' +
-          '<div class="metric-note">' + summary.attemptFailures + ' raw failed attempts across ' + summary.total + ' non-skipped results</div>' +
+          '<div class="metric-note">' + summary.fullTotal + ' full observations · ' + summary.logSignals + ' log signals · ' + summary.attemptFailures + ' raw failed attempts</div>' +
           '</article>'
         );
       }
@@ -901,18 +907,19 @@ function buildIndexHtml() {
       }
 
       function renderModule(module) {
-        const passRate = module.total ? (module.total - module.failed) / module.total : 0;
+        const passRate = module.full ? module.fullPassed / module.full : null;
         return (
           '<div class="module-item">' +
           '<strong>' + escapeHtml(module.name) + '</strong>' +
           '<div class="bar">' +
-          '<span class="bar-pass" style="width:' + clampPercent(passRate) + '%"></span>' +
-          '<span class="bar-fail" style="width:' + clampPercent(1 - passRate) + '%"></span>' +
+          '<span class="bar-pass" style="width:' + clampPercent(passRate ?? 0) + '%"></span>' +
+          '<span class="bar-fail" style="width:' + clampPercent(passRate === null ? 1 : 1 - passRate) + '%"></span>' +
           '</div>' +
           '<div class="module-row"><span>routes</span><strong>' + module.routes + '</strong></div>' +
           '<div class="module-row"><span>failed</span><strong>' + module.failed + '</strong></div>' +
           '<div class="module-row"><span>flaky</span><strong>' + module.flaky + '</strong></div>' +
-          '<div class="module-row"><span>pass rate</span><strong>' + formatPercent(passRate) + '</strong></div>' +
+          '<div class="module-row"><span>log signals</span><strong>' + module.log + '</strong></div>' +
+          '<div class="module-row"><span>full pass</span><strong>' + (passRate === null ? 'n/a' : formatPercent(passRate)) + '</strong></div>' +
           '</div>'
         );
       }
@@ -922,7 +929,7 @@ function buildIndexHtml() {
         const rows = [...state.runs].sort((left, right) =>
           String(right.completed_at).localeCompare(String(left.completed_at)),
         );
-        setText('run-count', rows.length + ' imported runs');
+        setText('run-count', rows.length + ' inspected runs');
         body.innerHTML = rows
           .map(
             (run) =>
@@ -932,6 +939,7 @@ function buildIndexHtml() {
               cell(escapeHtml(run.workflow)) +
               cell(escapeHtml(run.branch)) +
               cell(escapeHtml(run.event)) +
+              cell(escapeHtml(formatSource(run.data_source))) +
               cell(formatDateTime(run.started_at)) +
               cell(formatDateTime(run.completed_at)) +
               cell('<span class="pill ' + escapeAttr(run.conclusion) + '">' + escapeHtml(run.conclusion) + '</span>') +
@@ -993,28 +1001,37 @@ function buildIndexHtml() {
         const platforms = state.platformByRoute.get(row.route_id) ?? new Map();
         const macos = platforms.get('macos');
         const windows = platforms.get('windows');
-        const passRate = number(row.pass_rate);
         return (
           '<tr>' +
           cell('<div class="route-cell"><strong>' + escapeHtml(row.route_id) + '</strong></div>') +
           cell(renderTags(row.module_tags)) +
-          cell(
-            '<div class="health"><strong>' +
-              formatPercent(passRate) +
-              '</strong><div class="bar"><span class="bar-pass" style="width:' +
-              clampPercent(passRate) +
-              '%"></span><span class="bar-fail" style="width:' +
-              clampPercent(1 - passRate) +
-              '%"></span></div><div class="metric-note">' +
-              number(row.failed_runs) +
-              ' failed · ' +
-              number(row.flaky_runs) +
-              ' flaky</div></div>',
-          ) +
+          cell(renderRouteHealth(row)) +
           cell('<div class="platform-pair">' + renderPlatformChip('macOS', macos) + renderPlatformChip('Windows', windows) + '</div>') +
           cell('<span class="pill ' + escapeAttr(row.last_outcome) + '">' + escapeHtml(row.last_outcome || 'unknown') + '</span>') +
           cell('<div class="error-line">' + escapeHtml(row.top_error_signature || row.last_failed_at || '') + '</div>') +
           '</tr>'
+        );
+      }
+
+      function renderRouteHealth(row) {
+        const hasFull = number(row.full_runs) > 0 && row.pass_rate !== '';
+        const passRate = hasFull ? number(row.pass_rate) : null;
+        return (
+          '<div class="health"><strong>' +
+          (passRate === null ? 'n/a' : formatPercent(passRate)) +
+          '</strong><div class="bar"><span class="bar-pass" style="width:' +
+          clampPercent(passRate ?? 0) +
+          '%"></span><span class="bar-fail" style="width:' +
+          clampPercent(passRate === null ? 1 : 1 - passRate) +
+          '%"></span></div><div class="metric-note">' +
+          number(row.failed_runs) +
+          ' failed · ' +
+          number(row.flaky_runs) +
+          ' flaky · ' +
+          number(row.log_signal_runs) +
+          ' log</div><div class="metric-note">' +
+          number(row.full_runs) +
+          ' full observations</div></div>'
         );
       }
 
@@ -1031,7 +1048,9 @@ function buildIndexHtml() {
           'F · ' +
           number(row.flaky_runs) +
           'Fl · ' +
-          formatPercent(number(row.pass_rate)) +
+          number(row.log_signal_runs) +
+          ' log · ' +
+          (row.pass_rate === '' ? 'n/a' : formatPercent(number(row.pass_rate))) +
           '</div>' +
           '</div>'
         );
@@ -1047,6 +1066,18 @@ function buildIndexHtml() {
           if (result.outcome !== 'skipped') {
             summary.total += 1;
           }
+          if (isFullResult(result) && result.outcome !== 'skipped') {
+            summary.fullTotal += 1;
+            if (result.outcome === 'passed' || result.outcome === 'flaky') {
+              summary.fullPassed += 1;
+            }
+            if (result.outcome === 'failed') {
+              summary.fullFailed += 1;
+            }
+          }
+          if (isLogSignal(result)) {
+            summary.logSignals += 1;
+          }
           summaries.set(platform, summary);
         }
         return summaries;
@@ -1060,6 +1091,10 @@ function buildIndexHtml() {
           failed: 0,
           flaky: 0,
           skipped: 0,
+          fullTotal: 0,
+          fullPassed: 0,
+          fullFailed: 0,
+          logSignals: 0,
           attemptFailures: 0,
         };
       }
@@ -1080,11 +1115,17 @@ function buildIndexHtml() {
         for (const route of state.stats) {
           const tags = String(route.module_tags || 'untagged').split(';').filter(Boolean);
           for (const tag of tags.length ? tags : ['untagged']) {
-            const summary = modules.get(tag) ?? { name: tag, routes: 0, total: 0, failed: 0, flaky: 0, attempts: 0 };
+            const summary =
+              modules.get(tag) ?? { name: tag, routes: 0, full: 0, fullPassed: 0, failed: 0, flaky: 0, log: 0, attempts: 0 };
+            const fullRuns = number(route.full_runs);
             summary.routes += 1;
-            summary.total += number(route.total_runs);
+            summary.full += fullRuns;
+            if (route.pass_rate !== '') {
+              summary.fullPassed += number(route.pass_rate) * fullRuns;
+            }
             summary.failed += number(route.failed_runs);
             summary.flaky += number(route.flaky_runs);
+            summary.log += number(route.log_signal_runs);
             summary.attempts += number(route.attempt_failures);
             modules.set(tag, summary);
           }
@@ -1176,6 +1217,39 @@ function buildIndexHtml() {
           return 'Windows';
         }
         return platform || 'Unknown';
+      }
+
+      function isFullResult(row) {
+        return (row.data_source || 'artifact_json') === 'artifact_json';
+      }
+
+      function isLogSignal(row) {
+        return row.data_source === 'job_log_failure_summary';
+      }
+
+      function formatSource(value) {
+        const source = String(value || '');
+        if (!source) {
+          return 'artifact JSON';
+        }
+        return source
+          .split(';')
+          .map((item) => {
+            if (item === 'artifact_json') {
+              return 'artifact JSON';
+            }
+            if (item === 'job_log_failure_summary') {
+              return 'job log';
+            }
+            if (item === 'inspected_ci') {
+              return 'inspected';
+            }
+            if (item === 'unavailable_job_log') {
+              return 'log unavailable';
+            }
+            return item || 'unknown';
+          })
+          .join(' + ');
       }
 
       function proportion(value, total) {

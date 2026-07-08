@@ -25,7 +25,10 @@ to any CSV in this repository.
 
 Version 1 tracks only the AoE Desktop Mock E2E Playwright `electron` project from
 the main CI workflow. Unit tests, lint, format, build, visual tests, and
-`electron-real` are intentionally out of scope.
+`electron-real` are intentionally out of scope. Playwright JSON artifacts are the
+full-observation source of truth for pass rates; GitHub job logs are used only as
+a fallback to recover failed/flaky route signals when old JSON artifacts are no
+longer available.
 
 ## Data Files
 
@@ -89,8 +92,11 @@ route_id,module_tags,note
 
 ## Historical Backfill
 
-Historical data is best-effort because old CI runs may not have Playwright JSON
-artifacts. Run backfill manually from this repository:
+Historical data is best-effort. Backfill first imports Playwright JSON artifacts
+when GitHub still has them; when an old failed run no longer has E2E artifacts,
+it downloads the failed macOS/Windows Test job logs and recovers the final
+Playwright `failed`/`flaky` summary lines as failure-only route signals. Run
+backfill manually from this repository:
 
 ```bash
 pnpm backfill -- --repo AOE-HQ/aoe-desktop --workflow ci.yml --since 2026-01-01
@@ -105,4 +111,5 @@ the full `route_results.csv`. It does not delete other historical runs.
 Backfill automatically splits large created-date ranges before listing workflow
 runs because GitHub caps a single Actions run search window at 1000 results.
 It also pre-filters repository artifacts and only downloads runs that still have
-`e2e-report-*` artifacts.
+`e2e-report-*` artifacts. Runs without artifacts are still inspected for
+log-recoverable E2E failures.

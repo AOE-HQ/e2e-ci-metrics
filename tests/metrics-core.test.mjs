@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   HEADERS,
+  JOB_LOG_FAILURE_SOURCE,
+  extractRouteResultsFromJobLog,
   extractRouteResultsFromReport,
   readTable,
   stringifyCsv,
@@ -78,6 +80,8 @@ describe('E2E CI metrics core', () => {
     assert.deepEqual(
       pick(stats[0], [
         'total_runs',
+        'full_runs',
+        'log_signal_runs',
         'failed_runs',
         'flaky_runs',
         'attempt_failures',
@@ -90,6 +94,8 @@ describe('E2E CI metrics core', () => {
       ]),
       {
         total_runs: '2',
+        full_runs: '2',
+        log_signal_runs: '0',
         failed_runs: '1',
         flaky_runs: '1',
         attempt_failures: '2',
@@ -103,12 +109,24 @@ describe('E2E CI metrics core', () => {
     );
     assert.deepEqual(
       platformStats.map((row) =>
-        pick(row, ['platform', 'total_runs', 'failed_runs', 'flaky_runs', 'attempt_failures', 'pass_rate', 'last_outcome']),
+        pick(row, [
+          'platform',
+          'total_runs',
+          'full_runs',
+          'log_signal_runs',
+          'failed_runs',
+          'flaky_runs',
+          'attempt_failures',
+          'pass_rate',
+          'last_outcome',
+        ]),
       ),
       [
         {
           platform: 'macos',
           total_runs: '1',
+          full_runs: '1',
+          log_signal_runs: '0',
           failed_runs: '0',
           flaky_runs: '1',
           attempt_failures: '1',
@@ -118,6 +136,8 @@ describe('E2E CI metrics core', () => {
         {
           platform: 'windows',
           total_runs: '1',
+          full_runs: '1',
+          log_signal_runs: '0',
           failed_runs: '1',
           flaky_runs: '0',
           attempt_failures: '1',
@@ -126,6 +146,79 @@ describe('E2E CI metrics core', () => {
         },
       ],
     );
+  });
+
+  it('extracts failed and flaky route signals from GitHub job logs', () => {
+    const log = [
+      '2026-07-07T14:26:08.1500000Z   1) [electron] › tests/e2e/specs/automation-scheduled-tasks.spec.ts:2324:7 › Automation scheduled tasks › hides linked source event from the month cell',
+      '2026-07-07T14:26:08.1510000Z     \u001b[31mError:\u001b[39m expect(locator).toHaveCount(expected) failed',
+      '2026-07-07T14:26:08.1545630Z   1 failed',
+      '2026-07-07T14:26:08.1546150Z     [electron] › tests/e2e/specs/automation-scheduled-tasks.spec.ts:2324:7 › Automation scheduled tasks › hides linked source event from the month cell',
+      '2026-07-07T14:26:08.1546540Z   1 flaky',
+      '2026-07-07T14:26:08.1547040Z     [electron] › tests/e2e/specs/markdown-ime-and-image-paste.spec.ts:123:7 › Markdown IME composition + image paste › navigates between table cells with arrow keys',
+      '2026-07-07T14:26:08.1548380Z   73 skipped',
+      '2026-07-07T14:26:08.1548480Z   867 passed (18.6m)',
+    ].join('\n');
+
+    const results = extractRouteResultsFromJobLog(log, {
+      platform: 'macos',
+      artifactUrl: 'https://github.com/AOE-HQ/aoe-desktop/actions/runs/28871643027/job/85635752357',
+    });
+
+    assert.equal(results.length, 2);
+    assert.deepEqual(
+      results.map((row) =>
+        pick(row, ['platform', 'route_id', 'outcome', 'attempt_failures', 'retry_count', 'data_source']),
+      ),
+      [
+        {
+          platform: 'macos',
+          route_id:
+            'automation-scheduled-tasks.spec.ts :: Automation scheduled tasks > hides linked source event from the month cell',
+          outcome: 'failed',
+          attempt_failures: '1',
+          retry_count: '0',
+          data_source: JOB_LOG_FAILURE_SOURCE,
+        },
+        {
+          platform: 'macos',
+          route_id:
+            'markdown-ime-and-image-paste.spec.ts :: Markdown IME composition + image paste > navigates between table cells with arrow keys',
+          outcome: 'flaky',
+          attempt_failures: '1',
+          retry_count: '1',
+          data_source: JOB_LOG_FAILURE_SOURCE,
+        },
+      ],
+    );
+    assert.equal(results[0].error_signature, 'Error: expect(locator).toHaveCount(expected) failed');
+  });
+
+  it('keeps log-only signals out of full pass-rate denominators', () => {
+    const repo = createTempRepo();
+    const logResults = extractRouteResultsFromJobLog(
+      [
+        '2026-07-07T14:26:08.1545630Z   1 failed',
+        '2026-07-07T14:26:08.1546150Z     [electron] › tests/e2e/specs/automation-scheduled-tasks.spec.ts:2324:7 › Automation scheduled tasks › hides linked source event from the month cell',
+      ].join('\n'),
+      { platform: 'macos' },
+    );
+
+    updateMetrics({
+      repoRoot: repo,
+      reports: [],
+      results: logResults,
+      run: { ...baseRun(), data_source: JOB_LOG_FAILURE_SOURCE },
+    });
+
+    const stats = readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats);
+    assert.deepEqual(pick(stats[0], ['total_runs', 'full_runs', 'log_signal_runs', 'failed_runs', 'pass_rate']), {
+      total_runs: '1',
+      full_runs: '0',
+      log_signal_runs: '1',
+      failed_runs: '1',
+      pass_rate: '',
+    });
   });
 
   it('applies module tag overrides and current-run updates are idempotent', () => {

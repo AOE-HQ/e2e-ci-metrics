@@ -28,6 +28,7 @@
 | `started_at` | Run start timestamp when available. |
 | `completed_at` | Run completion timestamp. |
 | `conclusion` | Overall test conclusion as reported by AoE Desktop CI. |
+| `data_source` | Semicolon-separated metric sources used for this run: `inspected_ci`, `artifact_json`, `job_log_failure_summary`, or `unavailable_job_log`. |
 
 ## `data/route_results.csv`
 
@@ -44,6 +45,7 @@
 | `attempt_failures` | Number of failed/timed-out/interrupted attempts. |
 | `error_signature` | Normalized first error line when available. |
 | `artifact_url` | GitHub Actions run URL or artifact URL. |
+| `data_source` | `artifact_json` for full Playwright JSON observations, or `job_log_failure_summary` for failure-only log recovery. |
 
 ## `data/route_stats.csv`
 
@@ -51,11 +53,13 @@
 | --- | --- |
 | `route_id` | Stable route id. |
 | `module_tags` | Semicolon-separated product module tags. |
-| `total_runs` | Count of non-skipped route result rows. |
-| `failed_runs` | Count of final failed route result rows. |
-| `flaky_runs` | Count of retry-recovered route result rows. |
+| `total_runs` | Count of all non-skipped route result rows, including log-recovered failure signals. |
+| `full_runs` | Count of non-skipped full Playwright JSON observations. This is the denominator for `pass_rate`. |
+| `log_signal_runs` | Count of failure-only rows recovered from GitHub job logs after JSON artifacts were unavailable. |
+| `failed_runs` | Count of final failed route result rows, including log-recovered failures. |
+| `flaky_runs` | Count of retry-recovered route result rows, including log-recovered flaky signals. |
 | `attempt_failures` | Sum of raw failed attempts. |
-| `pass_rate` | `(total_runs - failed_runs) / total_runs`, four decimals. |
+| `pass_rate` | Full-observation pass rate from `artifact_json` rows only, four decimals; blank when no full observation exists. |
 | `failed_runs_macos` | Final failed result count on macOS. |
 | `failed_runs_windows` | Final failed result count on Windows. |
 | `last_outcome` | Latest outcome by run completion time. |
@@ -69,11 +73,13 @@
 | `route_id` | Stable route id. |
 | `platform` | `macos` or `windows`. |
 | `module_tags` | Semicolon-separated product module tags. |
-| `total_runs` | Count of non-skipped route result rows for this route on this platform. |
-| `failed_runs` | Count of final failed route result rows for this route on this platform. |
-| `flaky_runs` | Count of retry-recovered route result rows for this route on this platform. |
+| `total_runs` | Count of all non-skipped route result rows for this route on this platform. |
+| `full_runs` | Count of non-skipped full Playwright JSON observations for this route on this platform. |
+| `log_signal_runs` | Count of failure-only rows recovered from GitHub job logs for this route on this platform. |
+| `failed_runs` | Count of final failed route result rows for this route on this platform, including log-recovered failures. |
+| `flaky_runs` | Count of retry-recovered route result rows for this route on this platform, including log-recovered flaky signals. |
 | `attempt_failures` | Sum of raw failed attempts for this route on this platform. |
-| `pass_rate` | `(total_runs - failed_runs) / total_runs`, four decimals. |
+| `pass_rate` | Full-observation pass rate from `artifact_json` rows only, four decimals; blank when no full observation exists. |
 | `last_outcome` | Latest outcome by run completion time for this route on this platform. |
 | `last_failed_at` | Latest completion time where this route finally failed on this platform. |
 | `top_error_signature` | Most frequent non-empty error signature for this route on this platform. |

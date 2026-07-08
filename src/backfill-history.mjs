@@ -3,7 +3,15 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { discoverReports, updateMetrics } from './metrics-core.mjs';
+import {
+  HEADERS,
+  JOB_LOG_FAILURE_SOURCE,
+  discoverReports,
+  extractRouteResultsFromJobLog,
+  readTable,
+  updateMetrics,
+  writeTable,
+} from './metrics-core.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const repo = required(args, 'repo');
@@ -14,71 +22,276 @@ const repoRoot = path.resolve(args['repo-root'] ?? process.cwd());
 const limit = args.limit ? Number(args.limit) : Infinity;
 const retries = Number(args.retries ?? 3);
 const quietSkips = Boolean(args['quiet-skips']);
+const refresh = Boolean(args.refresh);
 
 const runs = listRuns({ repo, workflow, since, until, limit });
 const e2eArtifactRunIds = listE2eArtifactRunIds({ repo, since, until });
 console.log(`Found ${runs.length} historical workflow runs to inspect.`);
 console.log(`Found ${e2eArtifactRunIds.size} workflow runs with E2E JSON artifacts.`);
+const runSources = seedInspectedRuns({ repoRoot, runs, workflow });
 
 const summary = {
   inspected: 0,
   imported: 0,
   skippedNoArtifact: 0,
   skippedNoReport: 0,
+  skippedNoSignal: 0,
   artifactFailures: 0,
+  logFailures: 0,
+  skippedExisting: 0,
   reports: 0,
+  logResults: 0,
 };
 
 for (const run of runs) {
   summary.inspected += 1;
+  const runKey = getRunKey(run);
+  if (!refresh && isTerminalSource(runSources.get(runKey))) {
+    summary.skippedExisting += 1;
+    continue;
+  }
+
   const tempDir = mkdtempSync(path.join(os.tmpdir(), `e2e-ci-metrics-${run.databaseId}-`));
   try {
-    if (!e2eArtifactRunIds.has(String(run.databaseId))) {
+    let imported = false;
+
+    if (e2eArtifactRunIds.has(String(run.databaseId))) {
+      try {
+        downloadArtifacts({ repo, runId: run.databaseId, outputDir: tempDir, retries });
+        const reports = discoverReports(tempDir);
+        if (reports.length === 0) {
+          summary.skippedNoReport += 1;
+          logSkip(`Run ${run.databaseId}: E2E artifact existed but no JSON reports were found.`);
+        } else {
+          updateMetrics({
+            repoRoot,
+            reports,
+            run: buildRunRow(run, workflow, 'artifact_json'),
+            artifactUrl: run.url ?? '',
+          });
+          summary.imported += 1;
+          summary.reports += reports.length;
+          runSources.set(runKey, 'artifact_json');
+          imported = true;
+          console.log(`Run ${run.databaseId}: imported ${reports.length} report(s).`);
+        }
+      } catch (error) {
+        summary.artifactFailures += 1;
+        console.warn(`Run ${run.databaseId}: artifact import failed; trying job logs. ${error.message}`);
+      }
+    } else {
       summary.skippedNoArtifact += 1;
-      logSkip(`Run ${run.databaseId}: no E2E JSON artifacts found; skipped.`);
+      logSkip(`Run ${run.databaseId}: no E2E JSON artifacts found; trying job logs.`);
+    }
+
+    if (imported) {
       continue;
     }
 
-    downloadArtifacts({ repo, runId: run.databaseId, outputDir: tempDir, retries });
-    const reports = discoverReports(tempDir);
-    if (reports.length === 0) {
-      summary.skippedNoReport += 1;
-      logSkip(`Run ${run.databaseId}: no E2E JSON artifacts found; skipped.`);
+    const logResults = collectLogResults({ repo, run, retries });
+    if (logResults.length === 0) {
+      summary.skippedNoSignal += 1;
+      if (isFailureLikeRun(run)) {
+        markRunSource({ repoRoot, run, workflow, dataSource: 'unavailable_job_log' });
+        runSources.set(runKey, 'unavailable_job_log');
+      }
+      logSkip(`Run ${run.databaseId}: no E2E failure summary found in job logs; skipped.`);
       continue;
     }
 
     updateMetrics({
       repoRoot,
-      reports,
-      run: {
-        run_id: String(run.databaseId),
-        run_attempt: String(run.attempt ?? 1),
-        run_number: String(run.number ?? ''),
-        workflow: run.workflowName ?? workflow,
-        branch: run.headBranch ?? '',
-        sha: run.headSha ?? '',
-        event: run.event ?? '',
-        pr_number: run.prNumber ?? '',
-        started_at: run.startedAt ?? '',
-        completed_at: run.updatedAt ?? run.startedAt ?? '',
-        conclusion: run.conclusion ?? '',
-      },
+      reports: [],
+      results: logResults,
+      run: buildRunRow(run, workflow, JOB_LOG_FAILURE_SOURCE),
       artifactUrl: run.url ?? '',
     });
     summary.imported += 1;
-    summary.reports += reports.length;
-    console.log(`Run ${run.databaseId}: imported ${reports.length} report(s).`);
+    summary.logResults += logResults.length;
+    runSources.set(runKey, JOB_LOG_FAILURE_SOURCE);
+    console.log(`Run ${run.databaseId}: imported ${logResults.length} log-derived route signal(s).`);
   } catch (error) {
-    summary.artifactFailures += 1;
-    console.warn(`Run ${run.databaseId}: artifact import failed; skipped. ${error.message}`);
+    summary.logFailures += 1;
+    if (isFailureLikeRun(run) && isGhPermanentUnavailable(error)) {
+      markRunSource({ repoRoot, run, workflow, dataSource: 'unavailable_job_log' });
+      runSources.set(runKey, 'unavailable_job_log');
+    }
+    console.warn(`Run ${run.databaseId}: log import failed; skipped. ${error.message}`);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
 console.log(
-  `Backfill summary: inspected=${summary.inspected}, imported=${summary.imported}, reports=${summary.reports}, skippedNoArtifact=${summary.skippedNoArtifact}, skippedNoReport=${summary.skippedNoReport}, artifactFailures=${summary.artifactFailures}`,
+  `Backfill summary: inspected=${summary.inspected}, imported=${summary.imported}, reports=${summary.reports}, logResults=${summary.logResults}, skippedExisting=${summary.skippedExisting}, skippedNoArtifact=${summary.skippedNoArtifact}, skippedNoReport=${summary.skippedNoReport}, skippedNoSignal=${summary.skippedNoSignal}, artifactFailures=${summary.artifactFailures}, logFailures=${summary.logFailures}`,
 );
+
+function buildRunRow(run, workflow, dataSource) {
+  return {
+    run_id: String(run.databaseId),
+    run_attempt: String(run.attempt ?? 1),
+    run_number: String(run.number ?? ''),
+    workflow: run.workflowName ?? workflow,
+    branch: run.headBranch ?? '',
+    sha: run.headSha ?? '',
+    event: run.event ?? '',
+    pr_number: run.prNumber ?? '',
+    started_at: run.startedAt ?? '',
+    completed_at: run.updatedAt ?? run.startedAt ?? '',
+    conclusion: run.conclusion ?? '',
+    data_source: dataSource,
+  };
+}
+
+function seedInspectedRuns({ repoRoot, runs, workflow }) {
+  const runsPath = path.join(repoRoot, 'data', 'runs.csv');
+  const existing = readTable(runsPath, HEADERS.runs);
+  const byKey = new Map(existing.map((row) => [`${row.run_id}#${row.run_attempt || '1'}`, row]));
+
+  for (const run of runs) {
+    const row = buildRunRow(run, workflow, 'inspected_ci');
+    byKey.set(`${row.run_id}#${row.run_attempt}`, {
+      ...row,
+      data_source: byKey.get(`${row.run_id}#${row.run_attempt}`)?.data_source || row.data_source,
+    });
+  }
+
+  writeTable(
+    runsPath,
+    HEADERS.runs,
+    [...byKey.values()].sort((left, right) => (left.completed_at || '').localeCompare(right.completed_at || '')),
+  );
+  console.log(`Seeded ${runs.length} inspected workflow run row(s).`);
+  return new Map([...byKey.entries()].map(([key, row]) => [key, row.data_source]));
+}
+
+function markRunSource({ repoRoot, run, workflow, dataSource }) {
+  const runsPath = path.join(repoRoot, 'data', 'runs.csv');
+  const existing = readTable(runsPath, HEADERS.runs);
+  const row = buildRunRow(run, workflow, dataSource);
+  const byKey = new Map(existing.map((candidate) => [`${candidate.run_id}#${candidate.run_attempt || '1'}`, candidate]));
+  byKey.set(`${row.run_id}#${row.run_attempt}`, row);
+  writeTable(
+    runsPath,
+    HEADERS.runs,
+    [...byKey.values()].sort((left, right) => (left.completed_at || '').localeCompare(right.completed_at || '')),
+  );
+}
+
+function getRunKey(run) {
+  return `${run.databaseId}#${run.attempt ?? 1}`;
+}
+
+function isTerminalSource(source) {
+  return ['artifact_json', JOB_LOG_FAILURE_SOURCE, 'unavailable_job_log'].includes(String(source ?? ''));
+}
+
+function isFailureLikeRun(run) {
+  return ['failure', 'timed_out', 'cancelled'].includes(String(run.conclusion ?? '').toLowerCase());
+}
+
+function collectLogResults({ repo, run, retries }) {
+  if (!isFailureLikeRun(run)) {
+    return [];
+  }
+
+  const jobs = listE2eTestJobs({ repo, runId: run.databaseId });
+  const results = [];
+  for (const job of jobs) {
+    const conclusion = String(job.conclusion ?? '').toLowerCase();
+    if (!['failure', 'timed_out', 'cancelled'].includes(conclusion)) {
+      continue;
+    }
+
+    try {
+      const logText = downloadJobLog({ repo, jobId: job.databaseId, retries });
+      const jobResults = extractRouteResultsFromJobLog(logText, {
+        platform: job.platform,
+        artifactUrl: job.url,
+      });
+      results.push(...jobResults);
+      if (jobResults.length > 0) {
+        console.log(`Run ${run.databaseId} ${job.name}: recovered ${jobResults.length} route signal(s) from log.`);
+      }
+    } catch (error) {
+      console.warn(`Run ${run.databaseId} ${job.name}: could not recover log signals. ${error.message}`);
+    }
+  }
+
+  return results;
+}
+
+function listE2eTestJobs({ repo, runId }) {
+  const jobs = [];
+  let page = 1;
+
+  while (true) {
+    const response = ghApiJson(
+      `repos/${repo}/actions/runs/${runId}/jobs`,
+      {
+        filter: 'latest',
+        per_page: '100',
+        page: String(page),
+      },
+      '{jobs: [.jobs[] | {id, name, conclusion, html_url}]}',
+    );
+    const pageJobs = response.jobs ?? [];
+    if (pageJobs.length === 0) {
+      break;
+    }
+    for (const job of pageJobs) {
+      const platform = inferPlatformFromJobName(job.name);
+      if (!platform) {
+        continue;
+      }
+      jobs.push({
+        databaseId: job.id,
+        name: job.name,
+        conclusion: job.conclusion,
+        url: job.html_url,
+        platform,
+      });
+    }
+    page += 1;
+  }
+
+  return jobs;
+}
+
+function inferPlatformFromJobName(name) {
+  const lower = String(name ?? '').toLowerCase();
+  if (!lower.includes('test suite / test')) {
+    return '';
+  }
+  if (lower.includes('macos') || lower.includes('mac os') || lower.includes('darwin')) {
+    return 'macos';
+  }
+  if (lower.includes('windows') || lower.includes('win32')) {
+    return 'windows';
+  }
+  return '';
+}
+
+function downloadJobLog({ repo, jobId, retries }) {
+  const buffer = withRetries(
+    () =>
+      execFileSync('gh', ['api', '-X', 'GET', `repos/${repo}/actions/jobs/${jobId}/logs`], {
+        encoding: 'buffer',
+        maxBuffer: 128 * 1024 * 1024,
+      }),
+    retries,
+    `download job log ${jobId}`,
+  );
+  return decodeLogBuffer(buffer);
+}
+
+function decodeLogBuffer(buffer) {
+  const utf8 = buffer.toString('utf8');
+  if (utf8.includes('\u0000')) {
+    return buffer.toString('utf16le');
+  }
+  return utf8;
+}
 
 function listRuns({ repo, workflow, since, until, limit }) {
   const workflowId = resolveWorkflowId({ repo, workflow });
@@ -299,12 +512,20 @@ function withRetries(operation, retries, label) {
       return operation();
     } catch (error) {
       lastError = error;
+      if (isGhPermanentUnavailable(error)) {
+        throw error;
+      }
       if (attempt < retries) {
         console.warn(`${label}: attempt ${attempt} failed; retrying. ${error.message}`);
       }
     }
   }
   throw lastError;
+}
+
+function isGhPermanentUnavailable(error) {
+  const stderr = Buffer.isBuffer(error?.stderr) ? error.stderr.toString('utf8') : String(error?.stderr ?? '');
+  return /HTTP (404|410)/.test(`${error?.message ?? ''}\n${stderr}`);
 }
 
 function isWithinRange(timestamp, since, until) {
