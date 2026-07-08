@@ -62,6 +62,8 @@ function listRuns({ repo, workflow, since, limit }) {
       workflow,
       '--status',
       'completed',
+      '--created',
+      `>=${since}`,
       '--limit',
       String(limit),
       '--json',
