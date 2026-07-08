@@ -62,6 +62,22 @@
 | `last_failed_at` | Latest completion time where the route finally failed. |
 | `top_error_signature` | Most frequent non-empty error signature. |
 
+## `data/route_platform_stats.csv`
+
+| Column | Description |
+| --- | --- |
+| `route_id` | Stable route id. |
+| `platform` | `macos` or `windows`. |
+| `module_tags` | Semicolon-separated product module tags. |
+| `total_runs` | Count of non-skipped route result rows for this route on this platform. |
+| `failed_runs` | Count of final failed route result rows for this route on this platform. |
+| `flaky_runs` | Count of retry-recovered route result rows for this route on this platform. |
+| `attempt_failures` | Sum of raw failed attempts for this route on this platform. |
+| `pass_rate` | `(total_runs - failed_runs) / total_runs`, four decimals. |
+| `last_outcome` | Latest outcome by run completion time for this route on this platform. |
+| `last_failed_at` | Latest completion time where this route finally failed on this platform. |
+| `top_error_signature` | Most frequent non-empty error signature for this route on this platform. |
+
 ## `config/route-module-overrides.csv`
 
 | Column | Description |

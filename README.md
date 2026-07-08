@@ -33,6 +33,8 @@ the main CI workflow. Unit tests, lint, format, build, visual tests, and
 - `data/runs.csv`: GitHub Actions run metadata.
 - `data/route_results.csv`: per-run, per-platform route results.
 - `data/route_stats.csv`: aggregated route statistics.
+- `data/route_platform_stats.csv`: per-route, per-platform aggregate
+  statistics.
 - `config/route-module-overrides.csv`: manual module tag overrides.
 
 An E2E route id is:
@@ -95,3 +97,7 @@ pnpm backfill -- --repo AOE-HQ/aoe-desktop --workflow ci.yml --since 2026-01-01
 ```
 
 Normal AoE Desktop CI updates only the current run.
+
+The updater is idempotent by `run_id` and `run_attempt`: rerunning the same CI
+attempt replaces that attempt's rows, then recomputes aggregate CSV files from
+the full `route_results.csv`. It does not delete other historical runs.

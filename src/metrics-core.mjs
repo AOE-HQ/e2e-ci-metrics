@@ -53,6 +53,19 @@ export const HEADERS = {
     'last_failed_at',
     'top_error_signature',
   ],
+  routePlatformStats: [
+    'route_id',
+    'platform',
+    'module_tags',
+    'total_runs',
+    'failed_runs',
+    'flaky_runs',
+    'attempt_failures',
+    'pass_rate',
+    'last_outcome',
+    'last_failed_at',
+    'top_error_signature',
+  ],
   overrides: ['route_id', 'module_tags', 'note'],
 };
 
@@ -359,6 +372,7 @@ export function updateMetrics({ repoRoot, reports, run, artifactUrl = '' }) {
   const routeResultsPath = path.join(repoRoot, 'data', 'route_results.csv');
   const routesPath = path.join(repoRoot, 'data', 'routes.csv');
   const routeStatsPath = path.join(repoRoot, 'data', 'route_stats.csv');
+  const routePlatformStatsPath = path.join(repoRoot, 'data', 'route_platform_stats.csv');
 
   const existingRuns = readTable(runsPath, HEADERS.runs).filter((row) => getRunKey(row) !== runKey);
   const runs = [...existingRuns, runRow].sort(compareRunRows);
@@ -390,11 +404,13 @@ export function updateMetrics({ repoRoot, reports, run, artifactUrl = '' }) {
     overrides,
   });
   const stats = computeRouteStats({ routes, routeResults, runs });
+  const platformStats = computeRoutePlatformStats({ routes, routeResults, runs });
 
   writeTable(runsPath, HEADERS.runs, runs);
   writeTable(routeResultsPath, HEADERS.routeResults, routeResults);
   writeTable(routesPath, HEADERS.routes, routes);
   writeTable(routeStatsPath, HEADERS.routeStats, stats);
+  writeTable(routePlatformStatsPath, HEADERS.routePlatformStats, platformStats);
 
   return {
     routesUpdated: extractedResults.length,
@@ -449,6 +465,7 @@ function ensureTables(repoRoot) {
     ['data/runs.csv', HEADERS.runs],
     ['data/route_results.csv', HEADERS.routeResults],
     ['data/route_stats.csv', HEADERS.routeStats],
+    ['data/route_platform_stats.csv', HEADERS.routePlatformStats],
     ['config/route-module-overrides.csv', HEADERS.overrides],
   ];
 
@@ -512,6 +529,7 @@ function firstErrorSignature(results) {
 function normalizeErrorSignature(message) {
   return String(message)
     .split('\n')[0]
+    .replace(/\x1B\[[0-9;]*m/g, '')
     .replace(/\s+/g, ' ')
     .replace(/[A-Z]:\\[^\s)]+/g, '<path>')
     .replace(/\/[^ \t:)]+/g, '<path>')
@@ -579,6 +597,48 @@ function computeRouteStats({ routes, routeResults, runs }) {
   }
 
   return stats.sort((a, b) => a.route_id.localeCompare(b.route_id));
+}
+
+export function computeRoutePlatformStats({ routes, routeResults, runs }) {
+  const routeById = new Map(routes.map((route) => [route.route_id, route]));
+  const runByKey = new Map(runs.map((run) => [getRunKey(run), run]));
+  const grouped = new Map();
+
+  for (const result of routeResults) {
+    const groupKey = `${result.route_id}\0${result.platform}`;
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, []);
+    }
+    grouped.get(groupKey).push(result);
+  }
+
+  const stats = [];
+  for (const results of grouped.values()) {
+    const routeId = results[0]?.route_id ?? '';
+    const platform = results[0]?.platform ?? '';
+    const nonSkipped = results.filter((result) => result.outcome !== 'skipped');
+    const failed = results.filter((result) => result.outcome === 'failed');
+    const flaky = results.filter((result) => result.outcome === 'flaky');
+    const latest = [...results].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
+    const latestFailed = [...failed].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
+    const totalRuns = nonSkipped.length;
+
+    stats.push({
+      route_id: routeId,
+      platform,
+      module_tags: routeById.get(routeId)?.module_tags ?? '',
+      total_runs: String(totalRuns),
+      failed_runs: String(failed.length),
+      flaky_runs: String(flaky.length),
+      attempt_failures: String(sum(results.map((result) => Number(result.attempt_failures || 0)))),
+      pass_rate: totalRuns === 0 ? '' : ((totalRuns - failed.length) / totalRuns).toFixed(4),
+      last_outcome: latest?.outcome ?? '',
+      last_failed_at: latestFailed ? (runByKey.get(getRunKey(latestFailed))?.completed_at ?? '') : '',
+      top_error_signature: topErrorSignature(results),
+    });
+  }
+
+  return stats.sort((a, b) => a.route_id.localeCompare(b.route_id) || a.platform.localeCompare(b.platform));
 }
 
 function normalizeRun(run) {

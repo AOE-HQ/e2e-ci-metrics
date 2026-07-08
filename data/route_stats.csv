@@ -534,7 +534,7 @@ focus-management.spec.ts :: Focus Management > Focus area detection > clicking f
 focus-management.spec.ts :: Focus Management > Focus preservation across workspace tab switches > focus area is preserved when switching workspace tabs,focus-management,0,0,0,0,,0,0,skipped,,
 focus-management.spec.ts :: Focus Management > Focus restoration after dialogs > focus returns to chat after closing context menu with Escape,focus-management,4,0,0,0,1.0000,0,0,passed,,
 focus-management.spec.ts :: Focus Management > Focus restoration after dialogs > focus returns to file list after closing rename dialog with Escape,focus-management,4,0,0,0,1.0000,0,0,passed,,
-focus-management.spec.ts :: Focus Management > Focus restoration after preview > focus returns to file list after closing preview with Escape,focus-management,4,1,1,4,0.7500,1,0,passed,2026-07-07T19:53:10Z,Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) <path> Object.is equality[22m
+focus-management.spec.ts :: Focus Management > Focus restoration after preview > focus returns to file list after closing preview with Escape,focus-management,4,1,1,4,0.7500,1,0,passed,2026-07-07T19:53:10Z,Error: expect(received).toBe(expected) <path> Object.is equality
 focus-management.spec.ts :: Focus Management > Focus restoration after preview > focus returns to file list after image navigation in preview,focus-management,4,0,0,0,1.0000,0,0,passed,,
 focus-management.spec.ts :: Focus Management > Panel activation via focus > clicking on file list activates the correct panel,focus-management,4,0,0,0,1.0000,0,0,passed,,
 focus-management.spec.ts :: Focus Management > User-initiated focus priority > user click focus overrides programmatic focus attempts,focus-management,4,0,0,0,1.0000,0,0,passed,,
@@ -609,7 +609,7 @@ keyboard-shortcuts.spec.ts :: Keyboard Shortcuts > Preview: ArrowLeft/ArrowRight
 keyboard-shortcuts.spec.ts :: Keyboard Shortcuts > Shortcuts can be customized in Settings and apply live,keyboard-shortcuts,4,0,0,0,1.0000,0,0,passed,,
 keyboard-shortcuts.spec.ts :: Keyboard Shortcuts > Workspace tabs: Ctrl+Tab / Ctrl+Shift+Tab and Cmd/Ctrl+1..N switch tabs,keyboard-shortcuts,0,0,0,0,,0,0,skipped,,
 keyboard-shortcuts.spec.ts :: Keyboard Shortcuts > Workspace: panel toggles (sidebar/file browser/browser/chat/skill),browser;keyboard-shortcuts,0,0,0,0,,0,0,skipped,,
-legacy-auto-retry-rearms-recvi4OoaJ8HDI.spec.ts :: Legacy auto retry rearm (recvi4OoaJ8HDI) > two independent network auto-retry cycles both send hidden continue turns,chat,4,0,1,1,1.0000,0,0,flaky,,[31mTest timeout of 120000ms exceeded.[39m
+legacy-auto-retry-rearms-recvi4OoaJ8HDI.spec.ts :: Legacy auto retry rearm (recvi4OoaJ8HDI) > two independent network auto-retry cycles both send hidden continue turns,chat,4,0,1,1,1.0000,0,0,flaky,,Test timeout of 120000ms exceeded.
 local-claude-config-notice.spec.ts :: Local Claude config notice (recvhBdL9mMiXK) > renders a visible error message with a Settings link,settings,4,0,0,0,1.0000,0,0,passed,,
 main-thread-responsiveness.spec.ts :: Main Thread Responsiveness > chat input stays responsive during streaming with repeated main-thread probes,app-shell,4,0,0,0,1.0000,0,0,passed,,
 main-thread-responsiveness.spec.ts :: Main Thread Responsiveness > controlled main-thread blocking increases IPC roundtrip latency,app-shell,4,0,0,0,1.0000,0,0,passed,,
@@ -624,7 +624,7 @@ markdown-context-menu.spec.ts :: Markdown editor context menu > renders headings
 markdown-context-menu.spec.ts :: Markdown editor context menu > selects and copies text by dragging inside a Markdown table cell (recvnloCGDOBzJ),file-preview,4,0,0,0,1.0000,0,0,passed,,
 markdown-context-menu.spec.ts :: Markdown editor context menu > wraps long lines and restores the edit context menu,file-preview,4,0,0,0,1.0000,0,0,passed,,
 "markdown-editor-systematic.spec.ts :: Markdown editor systematic workflows > handles rapid typing, newline continuations, and format toolbar toggles",file-preview,4,0,0,0,1.0000,0,0,passed,,
-markdown-editor-systematic.spec.ts :: Markdown editor systematic workflows > keeps edits isolated while rapidly switching Markdown preview tabs,file-preview,4,0,1,1,1.0000,0,0,flaky,,Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoHaveCount[2m([22m[32mexpected[39m[2m)[22m failed
+markdown-editor-systematic.spec.ts :: Markdown editor systematic workflows > keeps edits isolated while rapidly switching Markdown preview tabs,file-preview,4,0,1,1,1.0000,0,0,flaky,,Error: expect(locator).toHaveCount(expected) failed
 "markdown-editor-systematic.spec.ts :: Markdown editor systematic workflows > preserves mid-document text edits, selection replacement, and ATX heading input",file-preview,4,0,0,0,1.0000,0,0,passed,,
 markdown-ime-and-image-paste.spec.ts :: Markdown IME composition + image paste > does not reset scroll or content while IME composition is active when the file changes on disk,file-preview,4,0,1,1,1.0000,0,0,flaky,,TimeoutError: locator.scrollIntoViewIfNeeded: Timeout 30000ms exceeded.
 "markdown-ime-and-image-paste.spec.ts :: Markdown IME composition + image paste > keeps the image rendered when editing above it, and </> still resolves its shifted position",file-preview,4,0,0,0,1.0000,0,0,passed,,
@@ -641,7 +641,7 @@ markdown-table-interaction.spec.ts :: Markdown table interaction > keeps the edi
 "markdown-table-interaction.spec.ts :: Markdown table interaction > renders links, bare URLs, and inline formatting inside table cells (BUG-026)",file-preview,4,0,0,0,1.0000,0,0,passed,,
 markdown-table-interaction.spec.ts :: Markdown table interaction > selected table row copies every selected column to clipboard (recvnlpkw1K4zM),file-preview,4,0,0,0,1.0000,0,0,passed,,
 markdown-table-interaction.spec.ts :: Markdown table interaction > table cell text supports native drag selection and clipboard copy (BUG-070),file-preview,4,0,0,0,1.0000,0,0,passed,,
-markdown-wikilinks.spec.ts :: Markdown wikilinks > opens existing Markdown targets on demand and shows recorded backlinks,file-preview,4,0,1,1,1.0000,0,0,passed,,Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoHaveText[2m([22m[32mexpected[39m[2m)[22m failed
+markdown-wikilinks.spec.ts :: Markdown wikilinks > opens existing Markdown targets on demand and shows recorded backlinks,file-preview,4,0,1,1,1.0000,0,0,passed,,Error: expect(locator).toHaveText(expected) failed
 memo-completion-notification-opens-session-recvnwfyDdJeEx.spec.ts :: Memo completion notification navigation (recvnwfyDdJeEx) > routes the notification click to the Memo task session instead of only focusing the window,memo,4,0,0,0,1.0000,0,0,passed,,
 memo-direct-message-starts-runtime-recvmNTxGC9VA3.spec.ts :: Memo direct message starts runtime before sending (recvmNTxGC9VA3) > main memo broadcast sends dropped text after adapter start for the target session,memo,4,0,0,0,1.0000,0,0,passed,,
 memo-direct-send-preserves-input-recvnVdsbEdCOW.spec.ts :: Memo direct send preserves dragged input (recvnVdsbEdCOW) > image memo keeps the attachment when preview URL loading rejects before send,memo,4,0,0,0,1.0000,0,0,passed,,

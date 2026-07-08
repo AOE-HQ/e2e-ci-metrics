@@ -7,7 +7,7 @@ const distDir = path.join(repoRoot, 'dist');
 const dataDir = path.join(repoRoot, 'data');
 const distDataDir = path.join(distDir, 'data');
 
-const csvFiles = ['routes.csv', 'runs.csv', 'route_results.csv', 'route_stats.csv'];
+const csvFiles = ['routes.csv', 'runs.csv', 'route_results.csv', 'route_stats.csv', 'route_platform_stats.csv'];
 
 rmSync(distDir, { recursive: true, force: true });
 mkdirSync(distDataDir, { recursive: true });
@@ -45,16 +45,19 @@ function buildIndexHtml() {
     <style>
       :root {
         color-scheme: light;
-        --bg: #f6f7f9;
+        --bg: #eef2f6;
         --panel: #ffffff;
-        --panel-border: #d9dee7;
-        --text: #172033;
-        --muted: #5e6a7d;
-        --accent: #0f766e;
-        --danger: #b42318;
-        --warn: #b54708;
-        --ok: #16703c;
-        --shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+        --line: #d8e0ea;
+        --line-soft: #e8edf3;
+        --text: #152033;
+        --muted: #647084;
+        --teal: #0f766e;
+        --blue: #2563eb;
+        --red: #b42318;
+        --amber: #b54708;
+        --green: #16703c;
+        --violet: #6d28d9;
+        --shadow: 0 1px 2px rgba(20, 31, 48, 0.08), 0 12px 36px rgba(20, 31, 48, 0.06);
       }
 
       * {
@@ -67,17 +70,18 @@ function buildIndexHtml() {
         color: var(--text);
         font-family:
           Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        line-height: 1.5;
+        line-height: 1.45;
+        overflow-x: hidden;
       }
 
       a {
-        color: var(--accent);
+        color: var(--teal);
       }
 
       .shell {
-        width: min(1440px, calc(100% - 32px));
+        width: min(1480px, calc(100% - 32px));
         margin: 0 auto;
-        padding: 28px 0 40px;
+        padding: 28px 0 44px;
       }
 
       header {
@@ -85,20 +89,26 @@ function buildIndexHtml() {
         align-items: flex-start;
         justify-content: space-between;
         gap: 24px;
-        margin-bottom: 20px;
+        margin-bottom: 18px;
       }
 
       h1 {
-        margin: 0 0 6px;
-        font-size: clamp(28px, 4vw, 42px);
+        margin: 0 0 8px;
+        font-size: clamp(30px, 4vw, 46px);
         line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 18px;
         letter-spacing: 0;
       }
 
       .subtitle {
         margin: 0;
         color: var(--muted);
-        max-width: 760px;
+        max-width: 780px;
       }
 
       .actions {
@@ -113,58 +123,67 @@ function buildIndexHtml() {
         align-items: center;
         min-height: 36px;
         padding: 0 12px;
-        border: 1px solid var(--panel-border);
+        border: 1px solid var(--line);
         border-radius: 6px;
         background: var(--panel);
         color: var(--text);
         text-decoration: none;
-        font-weight: 600;
+        font-size: 13px;
+        font-weight: 700;
         white-space: nowrap;
       }
 
-      .summary {
+      .hero-grid {
         display: grid;
-        grid-template-columns: repeat(6, minmax(140px, 1fr));
+        grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+        gap: 14px;
+      }
+
+      .scoreboard {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(120px, 1fr));
         gap: 10px;
-        margin-bottom: 16px;
       }
 
       .metric,
-      .panel {
+      .panel,
+      .risk-card,
+      .platform-card {
         background: var(--panel);
-        border: 1px solid var(--panel-border);
+        border: 1px solid var(--line);
         border-radius: 8px;
         box-shadow: var(--shadow);
       }
 
       .metric {
-        padding: 14px;
-        min-height: 92px;
+        min-height: 116px;
+        padding: 15px;
       }
 
       .metric-label {
         color: var(--muted);
         font-size: 12px;
-        font-weight: 700;
+        font-weight: 800;
         text-transform: uppercase;
       }
 
       .metric-value {
-        margin-top: 6px;
-        font-size: 28px;
-        font-weight: 800;
-        line-height: 1.1;
+        margin-top: 8px;
+        font-size: 30px;
+        font-weight: 850;
+        line-height: 1.05;
       }
 
       .metric-note {
-        margin-top: 3px;
+        margin-top: 5px;
         color: var(--muted);
         font-size: 12px;
       }
 
       .panel {
+        margin-top: 14px;
         padding: 16px;
-        margin-top: 16px;
+        min-width: 0;
       }
 
       .panel-heading {
@@ -175,75 +194,147 @@ function buildIndexHtml() {
         margin-bottom: 12px;
       }
 
-      h2 {
-        margin: 0;
-        font-size: 18px;
-        letter-spacing: 0;
+      .muted {
+        color: var(--muted);
       }
 
-      .controls {
+      .platform-grid {
         display: grid;
-        grid-template-columns: minmax(220px, 1fr) auto auto;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
-        margin-bottom: 12px;
       }
 
-      input,
-      select {
+      .platform-card {
+        padding: 14px;
+      }
+
+      .platform-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .platform-title strong {
+        font-size: 18px;
+      }
+
+      .bar {
+        display: flex;
         width: 100%;
-        min-height: 38px;
-        border: 1px solid var(--panel-border);
-        border-radius: 6px;
-        background: #ffffff;
-        color: var(--text);
-        padding: 0 10px;
-        font: inherit;
+        height: 12px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #edf1f5;
       }
 
-      .table-wrap {
-        overflow: auto;
-        border: 1px solid var(--panel-border);
-        border-radius: 8px;
+      .bar span {
+        min-width: 0;
       }
 
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        min-width: 1060px;
-        background: #ffffff;
+      .bar-pass {
+        background: var(--green);
       }
 
-      th,
-      td {
-        padding: 9px 10px;
-        border-bottom: 1px solid #e8ecf2;
-        text-align: left;
-        vertical-align: top;
-        font-size: 13px;
+      .bar-flaky {
+        background: var(--amber);
       }
 
-      th {
-        position: sticky;
-        top: 0;
-        z-index: 1;
-        background: #f2f5f8;
-        color: #394559;
-        font-size: 12px;
+      .bar-fail {
+        background: var(--red);
+      }
+
+      .bar-skip {
+        background: #a3adba;
+      }
+
+      .platform-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .mini-stat {
+        border: 1px solid var(--line-soft);
+        border-radius: 7px;
+        padding: 8px;
+      }
+
+      .mini-stat span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
         text-transform: uppercase;
       }
 
-      tbody tr:hover {
-        background: #f9fbfc;
+      .mini-stat strong {
+        display: block;
+        margin-top: 2px;
+        font-size: 18px;
       }
 
-      .route {
-        min-width: 420px;
-        max-width: 640px;
-        word-break: break-word;
+      .risk-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
       }
 
-      .muted {
-        color: var(--muted);
+      .risk-card {
+        padding: 13px;
+        min-width: 0;
+      }
+
+      .route-title {
+        display: -webkit-box;
+        min-height: 42px;
+        overflow: hidden;
+        color: var(--text);
+        font-weight: 800;
+        overflow-wrap: anywhere;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+
+      .risk-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 10px 0;
+      }
+
+      .pill,
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .pill {
+        padding: 0 8px;
+        background: #f2f5f8;
+        color: #435066;
+      }
+
+      .pill.failed {
+        background: #fee4df;
+        color: var(--red);
+      }
+
+      .pill.flaky {
+        background: #fff1d6;
+        color: var(--amber);
+      }
+
+      .pill.passed,
+      .pill.success {
+        background: #dcf5e6;
+        color: var(--green);
       }
 
       .tag-list {
@@ -253,32 +344,140 @@ function buildIndexHtml() {
       }
 
       .tag {
-        display: inline-flex;
-        align-items: center;
-        min-height: 22px;
         padding: 0 7px;
-        border-radius: 999px;
-        background: #e7f3f1;
+        background: #e5f3f1;
         color: #0f5e57;
+      }
+
+      .error-line {
+        display: -webkit-box;
+        min-height: 34px;
+        overflow: hidden;
+        color: var(--muted);
         font-size: 12px;
-        font-weight: 700;
+        overflow-wrap: anywhere;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
       }
 
-      .status {
-        font-weight: 800;
+      .controls {
+        display: grid;
+        grid-template-columns: minmax(260px, 1fr) 170px 170px 170px;
+        gap: 10px;
+        margin-bottom: 12px;
       }
 
-      .status.failed {
-        color: var(--danger);
+      input,
+      select {
+        width: 100%;
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #ffffff;
+        color: var(--text);
+        padding: 0 10px;
+        font: inherit;
       }
 
-      .status.flaky {
-        color: var(--warn);
+      .table-wrap {
+        width: 100%;
+        max-width: 100%;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
       }
 
-      .status.passed,
-      .status.success {
-        color: var(--ok);
+      table {
+        width: 100%;
+        min-width: 1180px;
+        border-collapse: collapse;
+        background: #ffffff;
+      }
+
+      th,
+      td {
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--line-soft);
+        text-align: left;
+        vertical-align: top;
+        font-size: 13px;
+      }
+
+      th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f4f7fa;
+        color: #3d4a60;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      tbody tr:hover {
+        background: #f9fbfd;
+      }
+
+      .route-cell {
+        min-width: 440px;
+        max-width: 680px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .health {
+        min-width: 150px;
+      }
+
+      .health .bar {
+        height: 8px;
+        margin-top: 6px;
+      }
+
+      .platform-pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        min-width: 220px;
+      }
+
+      .platform-chip {
+        border: 1px solid var(--line-soft);
+        border-radius: 7px;
+        padding: 7px;
+        background: #fbfcfd;
+      }
+
+      .platform-chip strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 12px;
+      }
+
+      .module-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .module-item {
+        border: 1px solid var(--line-soft);
+        border-radius: 8px;
+        padding: 12px;
+        background: #fbfcfd;
+      }
+
+      .module-item strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      .module-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 12px;
       }
 
       .empty {
@@ -287,7 +486,23 @@ function buildIndexHtml() {
         text-align: center;
       }
 
-      @media (max-width: 980px) {
+      @media (max-width: 1180px) {
+        .hero-grid,
+        .risk-grid,
+        .module-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .scoreboard {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .controls {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (max-width: 760px) {
         header,
         .panel-heading {
           flex-direction: column;
@@ -298,23 +513,52 @@ function buildIndexHtml() {
           justify-content: flex-start;
         }
 
-        .summary {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
+        .hero-grid,
+        .scoreboard,
+        .platform-grid,
+        .risk-grid,
+        .module-grid,
         .controls {
           grid-template-columns: 1fr;
         }
-      }
 
-      @media (max-width: 560px) {
         .shell {
-          width: min(100% - 20px, 1440px);
+          width: min(100% - 20px, 1480px);
           padding-top: 18px;
         }
 
-        .summary {
-          grid-template-columns: 1fr;
+        table {
+          min-width: 0;
+          table-layout: fixed;
+        }
+
+        thead {
+          display: none;
+        }
+
+        tbody,
+        tr,
+        td {
+          display: block;
+          width: 100%;
+        }
+
+        tr {
+          padding: 10px;
+          border-bottom: 1px solid var(--line-soft);
+        }
+
+        td {
+          padding: 7px 0;
+          border-bottom: 0;
+          overflow-wrap: anywhere;
+        }
+
+        .route-cell,
+        .health,
+        .platform-pair {
+          min-width: 0;
+          max-width: 100%;
         }
       }
     </style>
@@ -324,42 +568,80 @@ function buildIndexHtml() {
       <header>
         <div>
           <h1>AoE Desktop E2E CI Metrics</h1>
-          <p class="subtitle">Route-level Playwright E2E outcomes from AoE Desktop GitHub CI. Route IDs are stable spec/title paths rather than execution order.</p>
+          <p class="subtitle">Route-level Playwright E2E outcomes from AoE Desktop GitHub CI, with platform-specific aggregation for macOS and Windows.</p>
         </div>
         <nav class="actions" aria-label="CSV downloads">
-          <a class="button" href="data/routes.csv">routes.csv</a>
-          <a class="button" href="data/runs.csv">runs.csv</a>
-          <a class="button" href="data/route_results.csv">route_results.csv</a>
-          <a class="button" href="data/route_stats.csv">route_stats.csv</a>
+          <a class="button" href="data/routes.csv">routes</a>
+          <a class="button" href="data/runs.csv">runs</a>
+          <a class="button" href="data/route_results.csv">results</a>
+          <a class="button" href="data/route_stats.csv">route stats</a>
+          <a class="button" href="data/route_platform_stats.csv">platform stats</a>
         </nav>
       </header>
 
-      <section class="summary" aria-label="Summary metrics">
-        <div class="metric"><div class="metric-label">Runs</div><div id="metric-runs" class="metric-value">...</div><div class="metric-note">CI runs imported</div></div>
-        <div class="metric"><div class="metric-label">Routes</div><div id="metric-routes" class="metric-value">...</div><div class="metric-note">Stable E2E routes</div></div>
-        <div class="metric"><div class="metric-label">Failing Routes</div><div id="metric-failing" class="metric-value">...</div><div class="metric-note">At least one final failure</div></div>
-        <div class="metric"><div class="metric-label">Flaky Routes</div><div id="metric-flaky" class="metric-value">...</div><div class="metric-note">Retry recovered</div></div>
-        <div class="metric"><div class="metric-label">Avg Pass Rate</div><div id="metric-pass-rate" class="metric-value">...</div><div class="metric-note">Across observed routes</div></div>
-        <div class="metric"><div class="metric-label">Last Run</div><div id="metric-last-run" class="metric-value">...</div><div id="metric-last-run-note" class="metric-note">Loading</div></div>
+      <section class="hero-grid">
+        <div class="scoreboard" aria-label="Summary metrics">
+          <div class="metric"><div class="metric-label">Imported Runs</div><div id="metric-runs" class="metric-value">...</div><div id="metric-runs-note" class="metric-note">Loading</div></div>
+          <div class="metric"><div class="metric-label">Route Observations</div><div id="metric-observations" class="metric-value">...</div><div class="metric-note">per run and platform</div></div>
+          <div class="metric"><div class="metric-label">Failing Routes</div><div id="metric-failing" class="metric-value">...</div><div class="metric-note">final failures</div></div>
+          <div class="metric"><div class="metric-label">Flaky Routes</div><div id="metric-flaky" class="metric-value">...</div><div class="metric-note">retry recovered</div></div>
+          <div class="metric"><div class="metric-label">Avg Pass Rate</div><div id="metric-pass-rate" class="metric-value">...</div><div class="metric-note">weighted by observations</div></div>
+        </div>
+        <section class="panel" style="margin-top: 0">
+          <div class="panel-heading">
+            <h2>Latest Run</h2>
+            <span id="generated-at" class="muted">Loading</span>
+          </div>
+          <div id="latest-run"></div>
+        </section>
       </section>
 
       <section class="panel">
         <div class="panel-heading">
-          <h2>Route Statistics</h2>
+          <h2>Platform Health</h2>
+          <span class="muted">macOS and Windows are aggregated independently</span>
+        </div>
+        <div id="platform-cards" class="platform-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Attention Queue</h2>
+          <span class="muted">Routes sorted by final failures, flaky recoveries, and raw attempt failures</span>
+        </div>
+        <div id="risk-cards" class="risk-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Module Hotspots</h2>
+          <span id="module-count" class="muted">Loading</span>
+        </div>
+        <div id="module-grid" class="module-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Route Explorer</h2>
           <span id="route-count" class="muted">Loading</span>
         </div>
         <div class="controls">
-          <input id="search" type="search" placeholder="Search route, module tag, or error signature" aria-label="Search routes">
-          <select id="filter" aria-label="Filter routes">
+          <input id="search" type="search" placeholder="Search route, module, or error" aria-label="Search routes">
+          <select id="filter" aria-label="Filter route health">
             <option value="all">All routes</option>
             <option value="failed">Final failures</option>
             <option value="flaky">Flaky routes</option>
             <option value="attempts">Attempt failures</option>
           </select>
+          <select id="platform" aria-label="Filter platform">
+            <option value="all">All platforms</option>
+            <option value="macos">macOS signal</option>
+            <option value="windows">Windows signal</option>
+          </select>
           <select id="sort" aria-label="Sort routes">
             <option value="risk">Sort by risk</option>
-            <option value="failed">Sort by failed runs</option>
-            <option value="flaky">Sort by flaky runs</option>
+            <option value="failed">Sort by failures</option>
+            <option value="flaky">Sort by flaky</option>
             <option value="passRate">Sort by pass rate</option>
             <option value="route">Sort by route</option>
           </select>
@@ -369,14 +651,9 @@ function buildIndexHtml() {
             <thead>
               <tr>
                 <th>Route</th>
-                <th>Tags</th>
-                <th>Total</th>
-                <th>Failed</th>
-                <th>Flaky</th>
-                <th>Attempts</th>
-                <th>Pass Rate</th>
-                <th>macOS</th>
-                <th>Windows</th>
+                <th>Modules</th>
+                <th>Health</th>
+                <th>Platform Detail</th>
                 <th>Last</th>
                 <th>Top Error</th>
               </tr>
@@ -389,7 +666,7 @@ function buildIndexHtml() {
       <section class="panel">
         <div class="panel-heading">
           <h2>Imported Runs</h2>
-          <span id="generated-at" class="muted">Loading</span>
+          <span id="run-count" class="muted">Loading</span>
         </div>
         <div class="table-wrap">
           <table>
@@ -416,22 +693,35 @@ function buildIndexHtml() {
         manifest: 'manifest.json',
         runs: 'data/runs.csv',
         stats: 'data/route_stats.csv',
+        platformStats: 'data/route_platform_stats.csv',
+        results: 'data/route_results.csv',
       };
 
       const state = {
         runs: [],
         stats: [],
+        platformStats: [],
+        results: [],
+        platformByRoute: new Map(),
       };
 
       Promise.all([
         fetchJson(files.manifest),
         fetchCsv(files.runs),
         fetchCsv(files.stats),
+        fetchCsv(files.platformStats),
+        fetchCsv(files.results),
       ])
-        .then(([manifest, runs, stats]) => {
+        .then(([manifest, runs, stats, platformStats, results]) => {
           state.runs = runs;
           state.stats = stats;
+          state.platformStats = platformStats;
+          state.results = results;
+          state.platformByRoute = groupPlatformStats(platformStats);
           renderSummary(manifest);
+          renderPlatformHealth();
+          renderRiskCards();
+          renderModules();
           renderRuns();
           bindControls();
           renderRoutes();
@@ -513,24 +803,118 @@ function buildIndexHtml() {
 
       function renderSummary(manifest) {
         const totalRoutes = state.stats.length;
+        const totalObservations = state.results.length;
         const failingRoutes = state.stats.filter((row) => number(row.failed_runs) > 0).length;
         const flakyRoutes = state.stats.filter((row) => number(row.flaky_runs) > 0).length;
-        const avgPassRate = totalRoutes
-          ? state.stats.reduce((sum, row) => sum + number(row.pass_rate), 0) / totalRoutes
-          : 0;
-        const lastRun = [...state.runs].sort((left, right) =>
-          String(right.completed_at).localeCompare(String(left.completed_at)),
-        )[0];
+        const totalNonSkipped = sum(state.stats.map((row) => number(row.total_runs)));
+        const totalFailures = sum(state.stats.map((row) => number(row.failed_runs)));
+        const passRate = totalNonSkipped ? (totalNonSkipped - totalFailures) / totalNonSkipped : 0;
+        const lastRun = latestRun();
 
         setText('metric-runs', state.runs.length);
-        setText('metric-routes', totalRoutes);
+        setText('metric-runs-note', totalRoutes + ' stable routes imported');
+        setText('metric-observations', totalObservations);
         setText('metric-failing', failingRoutes);
         setText('metric-flaky', flakyRoutes);
-        setText('metric-pass-rate', formatPercent(avgPassRate));
-        setText('metric-last-run', lastRun?.conclusion || 'n/a');
-        document.getElementById('metric-last-run').className = 'metric-value status ' + (lastRun?.conclusion || '');
-        setText('metric-last-run-note', lastRun ? '#' + lastRun.run_number + ' on ' + lastRun.branch : 'No runs');
+        setText('metric-pass-rate', formatPercent(passRate));
         setText('generated-at', 'Generated ' + formatDateTime(manifest.generated_at));
+        renderLatestRun(lastRun);
+      }
+
+      function renderLatestRun(run) {
+        const container = document.getElementById('latest-run');
+        if (!run) {
+          container.innerHTML = '<div class="muted">No imported runs.</div>';
+          return;
+        }
+
+        container.innerHTML =
+          '<div class="metric-label">Run #' + escapeHtml(run.run_number || run.run_id) + '</div>' +
+          '<div class="metric-value status ' + escapeAttr(run.conclusion) + '">' + escapeHtml(run.conclusion || 'unknown') + '</div>' +
+          '<div class="metric-note">' + escapeHtml(run.branch || 'unknown branch') + ' · ' + escapeHtml(run.event || 'unknown event') + '</div>' +
+          '<div class="metric-note">Completed ' + formatDateTime(run.completed_at) + '</div>';
+      }
+
+      function renderPlatformHealth() {
+        const cards = document.getElementById('platform-cards');
+        const summaries = summarizeResultsByPlatform();
+        const preferred = ['macos', 'windows'];
+        cards.innerHTML = preferred
+          .map((platform) => renderPlatformCard(platform, summaries.get(platform) ?? emptyPlatformSummary(platform)))
+          .join('');
+      }
+
+      function renderPlatformCard(platform, summary) {
+        const observed = summary.passed + summary.flaky + summary.failed + summary.skipped;
+        const passRate = summary.total ? (summary.total - summary.failed) / summary.total : 0;
+        return (
+          '<article class="platform-card">' +
+          '<div class="platform-title"><strong>' + platformLabel(platform) + '</strong><span class="pill ' + healthClass(summary) + '">' + formatPercent(passRate) + '</span></div>' +
+          renderOutcomeBar(summary, observed) +
+          '<div class="platform-stats">' +
+          miniStat('Passed', summary.passed) +
+          miniStat('Flaky', summary.flaky) +
+          miniStat('Failed', summary.failed) +
+          miniStat('Skipped', summary.skipped) +
+          '</div>' +
+          '<div class="metric-note">' + summary.attemptFailures + ' raw failed attempts across ' + summary.total + ' non-skipped results</div>' +
+          '</article>'
+        );
+      }
+
+      function renderRiskCards() {
+        const container = document.getElementById('risk-cards');
+        const rows = [...state.stats].sort(compareRoutes('risk')).slice(0, 6);
+        if (rows.length === 0) {
+          container.innerHTML = '<div class="empty">No routes imported yet.</div>';
+          return;
+        }
+        container.innerHTML = rows.map(renderRiskCard).join('');
+      }
+
+      function renderRiskCard(row) {
+        const platforms = state.platformByRoute.get(row.route_id) ?? new Map();
+        const macos = platforms.get('macos');
+        const windows = platforms.get('windows');
+        return (
+          '<article class="risk-card">' +
+          '<div class="route-title">' + escapeHtml(row.route_id) + '</div>' +
+          '<div class="risk-meta">' +
+          '<span class="pill failed">' + number(row.failed_runs) + ' failed</span>' +
+          '<span class="pill flaky">' + number(row.flaky_runs) + ' flaky</span>' +
+          '<span class="pill">' + number(row.attempt_failures) + ' attempts</span>' +
+          '</div>' +
+          renderTags(row.module_tags) +
+          '<div class="platform-pair" style="margin-top: 10px">' +
+          renderPlatformChip('macOS', macos) +
+          renderPlatformChip('Windows', windows) +
+          '</div>' +
+          '<div class="error-line" style="margin-top: 10px">' + escapeHtml(row.top_error_signature || row.last_failed_at || 'No captured error signature') + '</div>' +
+          '</article>'
+        );
+      }
+
+      function renderModules() {
+        const modules = moduleSummaries().slice(0, 12);
+        setText('module-count', modules.length + ' modules shown');
+        document.getElementById('module-grid').innerHTML = modules.map(renderModule).join('');
+      }
+
+      function renderModule(module) {
+        const passRate = module.total ? (module.total - module.failed) / module.total : 0;
+        return (
+          '<div class="module-item">' +
+          '<strong>' + escapeHtml(module.name) + '</strong>' +
+          '<div class="bar">' +
+          '<span class="bar-pass" style="width:' + clampPercent(passRate) + '%"></span>' +
+          '<span class="bar-fail" style="width:' + clampPercent(1 - passRate) + '%"></span>' +
+          '</div>' +
+          '<div class="module-row"><span>routes</span><strong>' + module.routes + '</strong></div>' +
+          '<div class="module-row"><span>failed</span><strong>' + module.failed + '</strong></div>' +
+          '<div class="module-row"><span>flaky</span><strong>' + module.flaky + '</strong></div>' +
+          '<div class="module-row"><span>pass rate</span><strong>' + formatPercent(passRate) + '</strong></div>' +
+          '</div>'
+        );
       }
 
       function renderRuns() {
@@ -538,10 +922,11 @@ function buildIndexHtml() {
         const rows = [...state.runs].sort((left, right) =>
           String(right.completed_at).localeCompare(String(left.completed_at)),
         );
-
+        setText('run-count', rows.length + ' imported runs');
         body.innerHTML = rows
           .map(
-            (run) => '<tr>' +
+            (run) =>
+              '<tr>' +
               cell('#' + escapeHtml(run.run_number || run.run_id)) +
               cell(escapeHtml(run.run_attempt)) +
               cell(escapeHtml(run.workflow)) +
@@ -549,14 +934,14 @@ function buildIndexHtml() {
               cell(escapeHtml(run.event)) +
               cell(formatDateTime(run.started_at)) +
               cell(formatDateTime(run.completed_at)) +
-              cell('<span class="status ' + escapeAttr(run.conclusion) + '">' + escapeHtml(run.conclusion) + '</span>') +
+              cell('<span class="pill ' + escapeAttr(run.conclusion) + '">' + escapeHtml(run.conclusion) + '</span>') +
               '</tr>',
           )
           .join('');
       }
 
       function bindControls() {
-        for (const id of ['search', 'filter', 'sort']) {
+        for (const id of ['search', 'filter', 'platform', 'sort']) {
           document.getElementById(id).addEventListener('input', renderRoutes);
         }
       }
@@ -564,51 +949,159 @@ function buildIndexHtml() {
       function renderRoutes() {
         const search = document.getElementById('search').value.trim().toLowerCase();
         const filter = document.getElementById('filter').value;
+        const platform = document.getElementById('platform').value;
         const sort = document.getElementById('sort').value;
         const body = document.getElementById('routes-body');
 
-        let rows = state.stats.filter((row) => {
-          const haystack = [row.route_id, row.module_tags, row.top_error_signature].join(' ').toLowerCase();
-          if (search && !haystack.includes(search)) {
-            return false;
-          }
-          if (filter === 'failed') {
-            return number(row.failed_runs) > 0;
-          }
-          if (filter === 'flaky') {
-            return number(row.flaky_runs) > 0;
-          }
-          if (filter === 'attempts') {
-            return number(row.attempt_failures) > 0;
-          }
-          return true;
-        });
-
+        let rows = state.stats.filter((row) => routeMatches(row, { search, filter, platform }));
         rows = rows.sort(compareRoutes(sort)).slice(0, 500);
         setText('route-count', rows.length + ' shown of ' + state.stats.length);
 
         if (rows.length === 0) {
-          body.innerHTML = '<tr><td class="empty" colspan="11">No matching routes.</td></tr>';
+          body.innerHTML = '<tr><td class="empty" colspan="6">No matching routes.</td></tr>';
           return;
         }
 
         body.innerHTML = rows.map(renderRouteRow).join('');
       }
 
+      function routeMatches(row, { search, filter, platform }) {
+        const haystack = [row.route_id, row.module_tags, row.top_error_signature].join(' ').toLowerCase();
+        const platforms = state.platformByRoute.get(row.route_id) ?? new Map();
+        const selectedPlatform = platform === 'all' ? null : platforms.get(platform);
+
+        if (search && !haystack.includes(search)) {
+          return false;
+        }
+        if (platform !== 'all' && !selectedPlatform) {
+          return false;
+        }
+        const target = selectedPlatform ?? row;
+        if (filter === 'failed') {
+          return number(target.failed_runs) > 0;
+        }
+        if (filter === 'flaky') {
+          return number(target.flaky_runs) > 0;
+        }
+        if (filter === 'attempts') {
+          return number(target.attempt_failures) > 0;
+        }
+        return true;
+      }
+
       function renderRouteRow(row) {
-        return '<tr>' +
-          cell('<div class="route">' + escapeHtml(row.route_id) + '</div>') +
+        const platforms = state.platformByRoute.get(row.route_id) ?? new Map();
+        const macos = platforms.get('macos');
+        const windows = platforms.get('windows');
+        const passRate = number(row.pass_rate);
+        return (
+          '<tr>' +
+          cell('<div class="route-cell"><strong>' + escapeHtml(row.route_id) + '</strong></div>') +
           cell(renderTags(row.module_tags)) +
-          cell(number(row.total_runs)) +
-          cell(number(row.failed_runs)) +
-          cell(number(row.flaky_runs)) +
-          cell(number(row.attempt_failures)) +
-          cell(formatPercent(number(row.pass_rate))) +
-          cell(number(row.failed_runs_macos)) +
-          cell(number(row.failed_runs_windows)) +
-          cell('<span class="status ' + escapeAttr(row.last_outcome) + '">' + escapeHtml(row.last_outcome) + '</span>') +
-          cell(escapeHtml(row.top_error_signature || row.last_failed_at || '')) +
-          '</tr>';
+          cell(
+            '<div class="health"><strong>' +
+              formatPercent(passRate) +
+              '</strong><div class="bar"><span class="bar-pass" style="width:' +
+              clampPercent(passRate) +
+              '%"></span><span class="bar-fail" style="width:' +
+              clampPercent(1 - passRate) +
+              '%"></span></div><div class="metric-note">' +
+              number(row.failed_runs) +
+              ' failed · ' +
+              number(row.flaky_runs) +
+              ' flaky</div></div>',
+          ) +
+          cell('<div class="platform-pair">' + renderPlatformChip('macOS', macos) + renderPlatformChip('Windows', windows) + '</div>') +
+          cell('<span class="pill ' + escapeAttr(row.last_outcome) + '">' + escapeHtml(row.last_outcome || 'unknown') + '</span>') +
+          cell('<div class="error-line">' + escapeHtml(row.top_error_signature || row.last_failed_at || '') + '</div>') +
+          '</tr>'
+        );
+      }
+
+      function renderPlatformChip(label, row) {
+        if (!row) {
+          return '<div class="platform-chip"><strong>' + label + '</strong><span class="muted">no data</span></div>';
+        }
+        return (
+          '<div class="platform-chip">' +
+          '<strong>' + label + '</strong>' +
+          '<span class="pill ' + escapeAttr(row.last_outcome) + '">' + escapeHtml(row.last_outcome || 'unknown') + '</span>' +
+          '<div class="metric-note">' +
+          number(row.failed_runs) +
+          'F · ' +
+          number(row.flaky_runs) +
+          'Fl · ' +
+          formatPercent(number(row.pass_rate)) +
+          '</div>' +
+          '</div>'
+        );
+      }
+
+      function summarizeResultsByPlatform() {
+        const summaries = new Map();
+        for (const result of state.results) {
+          const platform = result.platform || 'unknown';
+          const summary = summaries.get(platform) ?? emptyPlatformSummary(platform);
+          summary[result.outcome] = (summary[result.outcome] ?? 0) + 1;
+          summary.attemptFailures += number(result.attempt_failures);
+          if (result.outcome !== 'skipped') {
+            summary.total += 1;
+          }
+          summaries.set(platform, summary);
+        }
+        return summaries;
+      }
+
+      function emptyPlatformSummary(platform) {
+        return {
+          platform,
+          total: 0,
+          passed: 0,
+          failed: 0,
+          flaky: 0,
+          skipped: 0,
+          attemptFailures: 0,
+        };
+      }
+
+      function groupPlatformStats(rows) {
+        const byRoute = new Map();
+        for (const row of rows) {
+          if (!byRoute.has(row.route_id)) {
+            byRoute.set(row.route_id, new Map());
+          }
+          byRoute.get(row.route_id).set(row.platform, row);
+        }
+        return byRoute;
+      }
+
+      function moduleSummaries() {
+        const modules = new Map();
+        for (const route of state.stats) {
+          const tags = String(route.module_tags || 'untagged').split(';').filter(Boolean);
+          for (const tag of tags.length ? tags : ['untagged']) {
+            const summary = modules.get(tag) ?? { name: tag, routes: 0, total: 0, failed: 0, flaky: 0, attempts: 0 };
+            summary.routes += 1;
+            summary.total += number(route.total_runs);
+            summary.failed += number(route.failed_runs);
+            summary.flaky += number(route.flaky_runs);
+            summary.attempts += number(route.attempt_failures);
+            modules.set(tag, summary);
+          }
+        }
+        return [...modules.values()].sort(
+          (left, right) =>
+            right.failed - left.failed ||
+            right.flaky - left.flaky ||
+            right.attempts - left.attempts ||
+            left.name.localeCompare(right.name),
+        );
+      }
+
+      function latestRun() {
+        return [...state.runs].sort((left, right) =>
+          String(right.completed_at).localeCompare(String(left.completed_at)),
+        )[0];
       }
 
       function compareRoutes(sort) {
@@ -635,6 +1128,20 @@ function buildIndexHtml() {
         };
       }
 
+      function renderOutcomeBar(summary, observed) {
+        if (!observed) {
+          return '<div class="bar"><span class="bar-skip" style="width:100%"></span></div>';
+        }
+        return (
+          '<div class="bar">' +
+          '<span class="bar-pass" style="width:' + proportion(summary.passed, observed) + '%"></span>' +
+          '<span class="bar-flaky" style="width:' + proportion(summary.flaky, observed) + '%"></span>' +
+          '<span class="bar-fail" style="width:' + proportion(summary.failed, observed) + '%"></span>' +
+          '<span class="bar-skip" style="width:' + proportion(summary.skipped, observed) + '%"></span>' +
+          '</div>'
+        );
+      }
+
       function renderTags(value) {
         const tags = String(value || '').split(';').filter(Boolean);
         if (tags.length === 0) {
@@ -643,8 +1150,40 @@ function buildIndexHtml() {
         return '<div class="tag-list">' + tags.map((tag) => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') + '</div>';
       }
 
+      function miniStat(label, value) {
+        return '<div class="mini-stat"><span>' + label + '</span><strong>' + value + '</strong></div>';
+      }
+
       function routeCompare(left, right) {
         return String(left.route_id).localeCompare(String(right.route_id));
+      }
+
+      function healthClass(summary) {
+        if (summary.failed > 0) {
+          return 'failed';
+        }
+        if (summary.flaky > 0) {
+          return 'flaky';
+        }
+        return 'passed';
+      }
+
+      function platformLabel(platform) {
+        if (platform === 'macos') {
+          return 'macOS';
+        }
+        if (platform === 'windows') {
+          return 'Windows';
+        }
+        return platform || 'Unknown';
+      }
+
+      function proportion(value, total) {
+        return total ? clampPercent(value / total) : 0;
+      }
+
+      function clampPercent(value) {
+        return Math.max(0, Math.min(100, Number(value) * 100)).toFixed(2);
       }
 
       function number(value) {
@@ -652,8 +1191,12 @@ function buildIndexHtml() {
         return Number.isFinite(parsed) ? parsed : 0;
       }
 
+      function sum(values) {
+        return values.reduce((total, value) => total + value, 0);
+      }
+
       function formatPercent(value) {
-        return (value * 100).toFixed(1) + '%';
+        return (value * 100).toFixed(2) + '%';
       }
 
       function formatDateTime(value) {

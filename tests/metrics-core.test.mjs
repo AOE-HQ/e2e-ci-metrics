@@ -67,6 +67,10 @@ describe('E2E CI metrics core', () => {
 
     const results = readTable(path.join(repo, 'data', 'route_results.csv'), HEADERS.routeResults);
     const stats = readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats);
+    const platformStats = readTable(
+      path.join(repo, 'data', 'route_platform_stats.csv'),
+      HEADERS.routePlatformStats,
+    );
 
     assert.equal(results.length, 2);
     assert.deepEqual(results.map((row) => `${row.platform}:${row.outcome}`).sort(), ['macos:flaky', 'windows:failed']);
@@ -85,17 +89,42 @@ describe('E2E CI metrics core', () => {
         'top_error_signature',
       ]),
       {
-      total_runs: '2',
-      failed_runs: '1',
-      flaky_runs: '1',
-      attempt_failures: '2',
-      pass_rate: '0.5000',
-      failed_runs_macos: '0',
-      failed_runs_windows: '1',
-      last_outcome: 'failed',
-      last_failed_at: '2026-07-07T12:00:00.000Z',
-      top_error_signature: 'Error: first attempt failed',
+        total_runs: '2',
+        failed_runs: '1',
+        flaky_runs: '1',
+        attempt_failures: '2',
+        pass_rate: '0.5000',
+        failed_runs_macos: '0',
+        failed_runs_windows: '1',
+        last_outcome: 'failed',
+        last_failed_at: '2026-07-07T12:00:00.000Z',
+        top_error_signature: 'Error: first attempt failed',
       },
+    );
+    assert.deepEqual(
+      platformStats.map((row) =>
+        pick(row, ['platform', 'total_runs', 'failed_runs', 'flaky_runs', 'attempt_failures', 'pass_rate', 'last_outcome']),
+      ),
+      [
+        {
+          platform: 'macos',
+          total_runs: '1',
+          failed_runs: '0',
+          flaky_runs: '1',
+          attempt_failures: '1',
+          pass_rate: '1.0000',
+          last_outcome: 'flaky',
+        },
+        {
+          platform: 'windows',
+          total_runs: '1',
+          failed_runs: '1',
+          flaky_runs: '0',
+          attempt_failures: '1',
+          pass_rate: '0.0000',
+          last_outcome: 'failed',
+        },
+      ],
     );
   });
 
