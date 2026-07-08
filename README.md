@@ -101,3 +101,8 @@ Normal AoE Desktop CI updates only the current run.
 The updater is idempotent by `run_id` and `run_attempt`: rerunning the same CI
 attempt replaces that attempt's rows, then recomputes aggregate CSV files from
 the full `route_results.csv`. It does not delete other historical runs.
+
+Backfill automatically splits large created-date ranges before listing workflow
+runs because GitHub caps a single Actions run search window at 1000 results.
+It also pre-filters repository artifacts and only downloads runs that still have
+`e2e-report-*` artifacts.

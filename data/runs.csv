@@ -1,3 +1,6 @@
 run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,completed_at,conclusion
 28871507162,1,5067,CI,codex/add-e2e-ci-metrics,1382d4764960fc622a000dbc5903fa5a8bc5c51a,pull_request,,2026-07-07T13:52:15Z,2026-07-07T18:32:06Z,success
 28889493140,1,5080,CI,dev,c873c5f1ae687a336f1d7d506fccaf9858cd1ac3,push,,2026-07-07T18:31:41Z,2026-07-07T19:53:10Z,failure
+28926442049,1,5082,CI,docs/commit-pr-archive-openspec,38b13da92b395d67bc3bf80f07e4506fb2a0dc74,pull_request,,2026-07-08T07:47:49Z,2026-07-08T09:07:47Z,success
+28931034272,1,5083,CI,dev,fc1fc6c199e13561e61304aec38fa92566b1d5c8,push,,2026-07-08T09:07:19Z,2026-07-08T10:27:41Z,success
+28935297104,1,5084,CI,codex/issue-1804-ci-billing-controls,bc3e262f238cdf2fe5fae77df185875b7a7940cf,pull_request,1805,2026-07-08T10:19:56Z,2026-07-08T11:44:28Z,success
