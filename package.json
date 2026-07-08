@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "build:pages": "node src/build-pages.mjs",
     "update-current-run": "node src/update-current-run.mjs",
     "backfill": "node src/backfill-history.mjs"
   },

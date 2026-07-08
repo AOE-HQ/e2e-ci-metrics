@@ -1,7 +1,25 @@
 # AoE Desktop E2E CI Metrics
 
-This private repository stores route-level CSV metrics for AoE Desktop GitHub CI
+This public repository stores route-level CSV metrics for AoE Desktop GitHub CI
 Playwright E2E runs.
+
+## GitHub Pages
+
+The public dashboard is generated from the CSV files and deployed with GitHub
+Pages:
+
+```bash
+pnpm build:pages
+```
+
+The generated site reads the copied CSV files from `dist/data/` and exposes the
+same raw CSV files for download. The deploy workflow runs on `main` pushes and
+uses GitHub Pages Actions deployment.
+
+Because this repository is public, route ids, module tags, branch names, run
+ids, SHAs, CI conclusions, and normalized error signatures are public data. Do
+not write secrets, private customer data, access tokens, or local machine paths
+to any CSV in this repository.
 
 ## Scope
 
