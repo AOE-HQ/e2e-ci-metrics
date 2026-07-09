@@ -362,7 +362,7 @@ function buildIndexHtml() {
 
       .controls {
         display: grid;
-        grid-template-columns: minmax(260px, 1fr) 170px 170px 170px;
+        grid-template-columns: minmax(260px, 1fr) 170px 170px 170px 140px;
         gap: 10px;
         margin-bottom: 12px;
       }
@@ -425,12 +425,37 @@ function buildIndexHtml() {
       }
 
       .health {
-        min-width: 150px;
+        min-width: 220px;
       }
 
       .health .bar {
         height: 8px;
         margin-top: 6px;
+      }
+
+      .health-block {
+        display: grid;
+        gap: 8px;
+      }
+
+      .health-title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        font-weight: 850;
+      }
+
+      .signal-box {
+        margin-top: 8px;
+        border-top: 1px solid var(--line-soft);
+        padding-top: 8px;
+      }
+
+      .signal-line {
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 800;
       }
 
       .platform-pair {
@@ -478,6 +503,34 @@ function buildIndexHtml() {
         gap: 8px;
         color: var(--muted);
         font-size: 12px;
+      }
+
+      .pagination {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .pagination button {
+        min-height: 32px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #ffffff;
+        color: var(--text);
+        padding: 0 10px;
+        font: inherit;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      .pagination button:disabled {
+        cursor: default;
+        opacity: 0.45;
       }
 
       .empty {
@@ -584,8 +637,8 @@ function buildIndexHtml() {
           <div class="metric"><div class="metric-label">CI Runs</div><div id="metric-runs" class="metric-value">...</div><div id="metric-runs-note" class="metric-note">Loading</div></div>
           <div class="metric"><div class="metric-label">Full Observations</div><div id="metric-observations" class="metric-value">...</div><div class="metric-note">artifact JSON rows</div></div>
           <div class="metric"><div class="metric-label">Log Signals</div><div id="metric-log-signals" class="metric-value">...</div><div class="metric-note">failure-only recovery</div></div>
-          <div class="metric"><div class="metric-label">Failing Routes</div><div id="metric-failing" class="metric-value">...</div><div class="metric-note">final failures</div></div>
-          <div class="metric"><div class="metric-label">Flaky Routes</div><div id="metric-flaky" class="metric-value">...</div><div class="metric-note">retry recovered</div></div>
+          <div class="metric"><div class="metric-label">Failure Signal Routes</div><div id="metric-failing" class="metric-value">...</div><div class="metric-note">full or log failures</div></div>
+          <div class="metric"><div class="metric-label">Flaky Signal Routes</div><div id="metric-flaky" class="metric-value">...</div><div class="metric-note">full or log flaky</div></div>
           <div class="metric"><div class="metric-label">Full Pass Rate</div><div id="metric-pass-rate" class="metric-value">...</div><div class="metric-note">artifact JSON only</div></div>
         </div>
         <section class="panel" style="margin-top: 0">
@@ -646,6 +699,11 @@ function buildIndexHtml() {
             <option value="passRate">Sort by pass rate</option>
             <option value="route">Sort by route</option>
           </select>
+          <select id="route-page-size" aria-label="Route rows per page">
+            <option value="25">25 / page</option>
+            <option value="50" selected>50 / page</option>
+            <option value="100">100 / page</option>
+          </select>
         </div>
         <div class="table-wrap">
           <table>
@@ -662,6 +720,7 @@ function buildIndexHtml() {
             <tbody id="routes-body"></tbody>
           </table>
         </div>
+        <div id="routes-pagination" class="pagination"></div>
       </section>
 
       <section class="panel">
@@ -687,6 +746,7 @@ function buildIndexHtml() {
             <tbody id="runs-body"></tbody>
           </table>
         </div>
+        <div id="runs-pagination" class="pagination"></div>
       </section>
     </main>
 
@@ -696,15 +756,17 @@ function buildIndexHtml() {
         runs: 'data/runs.csv',
         stats: 'data/route_stats.csv',
         platformStats: 'data/route_platform_stats.csv',
-        results: 'data/route_results.csv',
       };
 
       const state = {
         runs: [],
         stats: [],
         platformStats: [],
-        results: [],
         platformByRoute: new Map(),
+        routePage: 1,
+        routePageSize: 50,
+        runPage: 1,
+        runPageSize: 50,
       };
 
       Promise.all([
@@ -712,13 +774,11 @@ function buildIndexHtml() {
         fetchCsv(files.runs),
         fetchCsv(files.stats),
         fetchCsv(files.platformStats),
-        fetchCsv(files.results),
       ])
-        .then(([manifest, runs, stats, platformStats, results]) => {
+        .then(([manifest, runs, stats, platformStats]) => {
           state.runs = runs;
           state.stats = stats;
           state.platformStats = platformStats;
-          state.results = results;
           state.platformByRoute = groupPlatformStats(platformStats);
           renderSummary(manifest);
           renderPlatformHealth();
@@ -805,11 +865,11 @@ function buildIndexHtml() {
 
       function renderSummary(manifest) {
         const totalRoutes = state.stats.length;
-        const fullObservations = state.results.filter((row) => isFullResult(row) && row.outcome !== 'skipped').length;
-        const logSignals = state.results.filter(isLogSignal).length;
+        const fullObservations = sum(state.stats.map((row) => number(row.full_runs)));
+        const logSignals = sum(state.stats.map((row) => number(row.log_signal_runs)));
         const failingRoutes = state.stats.filter((row) => number(row.failed_runs) > 0).length;
         const flakyRoutes = state.stats.filter((row) => number(row.flaky_runs) > 0).length;
-        const fullFailures = state.results.filter((row) => isFullResult(row) && row.outcome === 'failed').length;
+        const fullFailures = sum(state.stats.map((row) => number(row.full_failed_runs)));
         const passRate = fullObservations ? (fullObservations - fullFailures) / fullObservations : null;
         const lastRun = latestRun();
         const fullRuns = state.runs.filter((run) => String(run.data_source || '').includes('artifact_json')).length;
@@ -843,7 +903,7 @@ function buildIndexHtml() {
 
       function renderPlatformHealth() {
         const cards = document.getElementById('platform-cards');
-        const summaries = summarizeResultsByPlatform();
+        const summaries = summarizePlatformStats();
         const preferred = ['macos', 'windows'];
         cards.innerHTML = preferred
           .map((platform) => renderPlatformCard(platform, summaries.get(platform) ?? emptyPlatformSummary(platform)))
@@ -851,19 +911,18 @@ function buildIndexHtml() {
       }
 
       function renderPlatformCard(platform, summary) {
-        const observed = summary.passed + summary.flaky + summary.failed + summary.skipped;
         const passRate = summary.fullTotal ? (summary.fullTotal - summary.fullFailed) / summary.fullTotal : null;
         return (
           '<article class="platform-card">' +
-          '<div class="platform-title"><strong>' + platformLabel(platform) + '</strong><span class="pill ' + healthClass(summary) + '">' + (passRate === null ? 'n/a' : formatPercent(passRate)) + '</span></div>' +
-          renderOutcomeBar(summary, observed) +
+          '<div class="platform-title"><strong>' + platformLabel(platform) + '</strong><span class="pill ' + healthClass(summary) + '">' + (passRate === null ? 'n/a full' : formatPercent(passRate) + ' full') + '</span></div>' +
+          renderOutcomeBar(summary) +
           '<div class="platform-stats">' +
-          miniStat('Passed', summary.fullPassed) +
-          miniStat('Flaky', summary.flaky) +
-          miniStat('Failed', summary.failed) +
-          miniStat('Log', summary.logSignals) +
+          miniStat('Full', summary.fullTotal) +
+          miniStat('Full Fail', summary.fullFailed) +
+          miniStat('Log Fail', summary.logFailed) +
+          miniStat('Log Flaky', summary.logFlaky) +
           '</div>' +
-          '<div class="metric-note">' + summary.fullTotal + ' full observations · ' + summary.logSignals + ' log signals · ' + summary.attemptFailures + ' raw failed attempts</div>' +
+          '<div class="metric-note">' + summary.fullFlaky + ' full flaky · ' + summary.logSignals + ' log signals · ' + summary.attemptFailures + ' raw failed attempts</div>' +
           '</article>'
         );
       }
@@ -886,8 +945,9 @@ function buildIndexHtml() {
           '<article class="risk-card">' +
           '<div class="route-title">' + escapeHtml(row.route_id) + '</div>' +
           '<div class="risk-meta">' +
-          '<span class="pill failed">' + number(row.failed_runs) + ' failed</span>' +
-          '<span class="pill flaky">' + number(row.flaky_runs) + ' flaky</span>' +
+          '<span class="pill failed">' + number(row.log_failed_runs) + ' log failed</span>' +
+          '<span class="pill flaky">' + number(row.log_flaky_runs) + ' log flaky</span>' +
+          '<span class="pill">' + fullPassLabel(row) + '</span>' +
           '<span class="pill">' + number(row.attempt_failures) + ' attempts</span>' +
           '</div>' +
           renderTags(row.module_tags) +
@@ -907,7 +967,7 @@ function buildIndexHtml() {
       }
 
       function renderModule(module) {
-        const passRate = module.full ? module.fullPassed / module.full : null;
+        const passRate = module.full ? (module.full - module.fullFailed) / module.full : null;
         return (
           '<div class="module-item">' +
           '<strong>' + escapeHtml(module.name) + '</strong>' +
@@ -916,9 +976,9 @@ function buildIndexHtml() {
           '<span class="bar-fail" style="width:' + clampPercent(passRate === null ? 1 : 1 - passRate) + '%"></span>' +
           '</div>' +
           '<div class="module-row"><span>routes</span><strong>' + module.routes + '</strong></div>' +
-          '<div class="module-row"><span>failed</span><strong>' + module.failed + '</strong></div>' +
-          '<div class="module-row"><span>flaky</span><strong>' + module.flaky + '</strong></div>' +
-          '<div class="module-row"><span>log signals</span><strong>' + module.log + '</strong></div>' +
+          '<div class="module-row"><span>full failed</span><strong>' + module.fullFailed + '</strong></div>' +
+          '<div class="module-row"><span>log failed</span><strong>' + module.logFailed + '</strong></div>' +
+          '<div class="module-row"><span>log flaky</span><strong>' + module.logFlaky + '</strong></div>' +
           '<div class="module-row"><span>full pass</span><strong>' + (passRate === null ? 'n/a' : formatPercent(passRate)) + '</strong></div>' +
           '</div>'
         );
@@ -929,8 +989,9 @@ function buildIndexHtml() {
         const rows = [...state.runs].sort((left, right) =>
           String(right.completed_at).localeCompare(String(left.completed_at)),
         );
-        setText('run-count', rows.length + ' inspected runs');
-        body.innerHTML = rows
+        const pageRows = paginate(rows, state.runPage, state.runPageSize);
+        setText('run-count', rangeLabel(rows.length, state.runPage, state.runPageSize) + ' of ' + rows.length + ' inspected runs');
+        body.innerHTML = pageRows
           .map(
             (run) =>
               '<tr>' +
@@ -946,12 +1007,29 @@ function buildIndexHtml() {
               '</tr>',
           )
           .join('');
+        renderPagination('runs-pagination', {
+          total: rows.length,
+          page: state.runPage,
+          pageSize: state.runPageSize,
+          onPage: (page) => {
+            state.runPage = page;
+            renderRuns();
+          },
+        });
       }
 
       function bindControls() {
         for (const id of ['search', 'filter', 'platform', 'sort']) {
-          document.getElementById(id).addEventListener('input', renderRoutes);
+          document.getElementById(id).addEventListener('input', () => {
+            state.routePage = 1;
+            renderRoutes();
+          });
         }
+        document.getElementById('route-page-size').addEventListener('input', (event) => {
+          state.routePageSize = number(event.target.value) || 50;
+          state.routePage = 1;
+          renderRoutes();
+        });
       }
 
       function renderRoutes() {
@@ -961,16 +1039,33 @@ function buildIndexHtml() {
         const sort = document.getElementById('sort').value;
         const body = document.getElementById('routes-body');
 
-        let rows = state.stats.filter((row) => routeMatches(row, { search, filter, platform }));
-        rows = rows.sort(compareRoutes(sort)).slice(0, 500);
-        setText('route-count', rows.length + ' shown of ' + state.stats.length);
+        const rows = state.stats
+          .filter((row) => routeMatches(row, { search, filter, platform }))
+          .sort(compareRoutes(sort));
+        const pageRows = paginate(rows, state.routePage, state.routePageSize);
+        setText('route-count', rangeLabel(rows.length, state.routePage, state.routePageSize) + ' of ' + rows.length + ' matching routes');
 
-        if (rows.length === 0) {
+        if (pageRows.length === 0) {
           body.innerHTML = '<tr><td class="empty" colspan="6">No matching routes.</td></tr>';
+          renderPagination('routes-pagination', {
+            total: 0,
+            page: 1,
+            pageSize: state.routePageSize,
+            onPage: () => {},
+          });
           return;
         }
 
-        body.innerHTML = rows.map(renderRouteRow).join('');
+        body.innerHTML = pageRows.map(renderRouteRow).join('');
+        renderPagination('routes-pagination', {
+          total: rows.length,
+          page: state.routePage,
+          pageSize: state.routePageSize,
+          onPage: (page) => {
+            state.routePage = page;
+            renderRoutes();
+          },
+        });
       }
 
       function routeMatches(row, { search, filter, platform }) {
@@ -986,10 +1081,10 @@ function buildIndexHtml() {
         }
         const target = selectedPlatform ?? row;
         if (filter === 'failed') {
-          return number(target.failed_runs) > 0;
+          return number(target.full_failed_runs) + number(target.log_failed_runs) > 0;
         }
         if (filter === 'flaky') {
-          return number(target.flaky_runs) > 0;
+          return number(target.full_flaky_runs) + number(target.log_flaky_runs) > 0;
         }
         if (filter === 'attempts') {
           return number(target.attempt_failures) > 0;
@@ -1016,22 +1111,29 @@ function buildIndexHtml() {
       function renderRouteHealth(row) {
         const hasFull = number(row.full_runs) > 0 && row.pass_rate !== '';
         const passRate = hasFull ? number(row.pass_rate) : null;
+        const fullPassed = Math.max(0, number(row.full_runs) - number(row.full_failed_runs) - number(row.full_flaky_runs));
         return (
-          '<div class="health"><strong>' +
+          '<div class="health health-block">' +
+          '<div><div class="health-title"><span>Full observations</span><strong>' +
           (passRate === null ? 'n/a' : formatPercent(passRate)) +
-          '</strong><div class="bar"><span class="bar-pass" style="width:' +
-          clampPercent(passRate ?? 0) +
-          '%"></span><span class="bar-fail" style="width:' +
-          clampPercent(passRate === null ? 1 : 1 - passRate) +
-          '%"></span></div><div class="metric-note">' +
-          number(row.failed_runs) +
+          '</strong></div>' +
+          renderFullBar(row) +
+          '<div class="metric-note">' +
+          number(row.full_runs) +
+          ' total · ' +
+          fullPassed +
+          ' passed · ' +
+          number(row.full_flaky_runs) +
+          ' flaky · ' +
+          number(row.full_failed_runs) +
+          ' failed</div></div>' +
+          '<div class="signal-box"><div class="signal-line">Log signals: ' +
+          number(row.log_failed_runs) +
           ' failed · ' +
-          number(row.flaky_runs) +
+          number(row.log_flaky_runs) +
           ' flaky · ' +
           number(row.log_signal_runs) +
-          ' log</div><div class="metric-note">' +
-          number(row.full_runs) +
-          ' full observations</div></div>'
+          ' total</div></div></div>'
         );
       }
 
@@ -1043,41 +1145,40 @@ function buildIndexHtml() {
           '<div class="platform-chip">' +
           '<strong>' + label + '</strong>' +
           '<span class="pill ' + escapeAttr(row.last_outcome) + '">' + escapeHtml(row.last_outcome || 'unknown') + '</span>' +
-          '<div class="metric-note">' +
-          number(row.failed_runs) +
-          'F · ' +
-          number(row.flaky_runs) +
-          'Fl · ' +
-          number(row.log_signal_runs) +
-          ' log · ' +
+          '<div class="metric-note">Full: ' +
           (row.pass_rate === '' ? 'n/a' : formatPercent(number(row.pass_rate))) +
-          '</div>' +
+          ' · ' +
+          number(row.full_runs) +
+          ' obs · ' +
+          number(row.full_failed_runs) +
+          ' failed · ' +
+          number(row.full_flaky_runs) +
+          ' flaky</div>' +
+          '<div class="metric-note">Log: ' +
+          number(row.log_failed_runs) +
+          ' failed · ' +
+          number(row.log_flaky_runs) +
+          ' flaky</div>' +
           '</div>'
         );
       }
 
-      function summarizeResultsByPlatform() {
+      function summarizePlatformStats() {
         const summaries = new Map();
-        for (const result of state.results) {
-          const platform = result.platform || 'unknown';
+        for (const row of state.platformStats) {
+          const platform = row.platform || 'unknown';
           const summary = summaries.get(platform) ?? emptyPlatformSummary(platform);
-          summary[result.outcome] = (summary[result.outcome] ?? 0) + 1;
-          summary.attemptFailures += number(result.attempt_failures);
-          if (result.outcome !== 'skipped') {
-            summary.total += 1;
-          }
-          if (isFullResult(result) && result.outcome !== 'skipped') {
-            summary.fullTotal += 1;
-            if (result.outcome === 'passed' || result.outcome === 'flaky') {
-              summary.fullPassed += 1;
-            }
-            if (result.outcome === 'failed') {
-              summary.fullFailed += 1;
-            }
-          }
-          if (isLogSignal(result)) {
-            summary.logSignals += 1;
-          }
+          summary.fullTotal += number(row.full_runs);
+          summary.fullFailed += number(row.full_failed_runs);
+          summary.fullFlaky += number(row.full_flaky_runs);
+          summary.fullPassed += Math.max(
+            0,
+            number(row.full_runs) - number(row.full_failed_runs) - number(row.full_flaky_runs),
+          );
+          summary.logSignals += number(row.log_signal_runs);
+          summary.logFailed += number(row.log_failed_runs);
+          summary.logFlaky += number(row.log_flaky_runs);
+          summary.attemptFailures += number(row.attempt_failures);
           summaries.set(platform, summary);
         }
         return summaries;
@@ -1087,14 +1188,13 @@ function buildIndexHtml() {
         return {
           platform,
           total: 0,
-          passed: 0,
-          failed: 0,
-          flaky: 0,
-          skipped: 0,
           fullTotal: 0,
           fullPassed: 0,
           fullFailed: 0,
+          fullFlaky: 0,
           logSignals: 0,
+          logFailed: 0,
+          logFlaky: 0,
           attemptFailures: 0,
         };
       }
@@ -1116,15 +1216,24 @@ function buildIndexHtml() {
           const tags = String(route.module_tags || 'untagged').split(';').filter(Boolean);
           for (const tag of tags.length ? tags : ['untagged']) {
             const summary =
-              modules.get(tag) ?? { name: tag, routes: 0, full: 0, fullPassed: 0, failed: 0, flaky: 0, log: 0, attempts: 0 };
+              modules.get(tag) ?? {
+                name: tag,
+                routes: 0,
+                full: 0,
+                fullFailed: 0,
+                fullFlaky: 0,
+                logFailed: 0,
+                logFlaky: 0,
+                log: 0,
+                attempts: 0,
+              };
             const fullRuns = number(route.full_runs);
             summary.routes += 1;
             summary.full += fullRuns;
-            if (route.pass_rate !== '') {
-              summary.fullPassed += number(route.pass_rate) * fullRuns;
-            }
-            summary.failed += number(route.failed_runs);
-            summary.flaky += number(route.flaky_runs);
+            summary.fullFailed += number(route.full_failed_runs);
+            summary.fullFlaky += number(route.full_flaky_runs);
+            summary.logFailed += number(route.log_failed_runs);
+            summary.logFlaky += number(route.log_flaky_runs);
             summary.log += number(route.log_signal_runs);
             summary.attempts += number(route.attempt_failures);
             modules.set(tag, summary);
@@ -1132,8 +1241,9 @@ function buildIndexHtml() {
         }
         return [...modules.values()].sort(
           (left, right) =>
-            right.failed - left.failed ||
-            right.flaky - left.flaky ||
+            right.logFailed - left.logFailed ||
+            right.logFlaky - left.logFlaky ||
+            right.fullFailed - left.fullFailed ||
             right.attempts - left.attempts ||
             left.name.localeCompare(right.name),
         );
@@ -1148,38 +1258,54 @@ function buildIndexHtml() {
       function compareRoutes(sort) {
         return (left, right) => {
           if (sort === 'failed') {
-            return number(right.failed_runs) - number(left.failed_runs) || routeCompare(left, right);
+            return failureSignals(right) - failureSignals(left) || routeCompare(left, right);
           }
           if (sort === 'flaky') {
-            return number(right.flaky_runs) - number(left.flaky_runs) || routeCompare(left, right);
+            return flakySignals(right) - flakySignals(left) || routeCompare(left, right);
           }
           if (sort === 'passRate') {
-            return number(left.pass_rate) - number(right.pass_rate) || routeCompare(left, right);
+            return passRateSortValue(left) - passRateSortValue(right) || routeCompare(left, right);
           }
           if (sort === 'route') {
             return routeCompare(left, right);
           }
           return (
-            number(right.failed_runs) - number(left.failed_runs) ||
-            number(right.flaky_runs) - number(left.flaky_runs) ||
+            failureSignals(right) - failureSignals(left) ||
+            flakySignals(right) - flakySignals(left) ||
             number(right.attempt_failures) - number(left.attempt_failures) ||
-            number(left.pass_rate) - number(right.pass_rate) ||
+            passRateSortValue(left) - passRateSortValue(right) ||
             routeCompare(left, right)
           );
         };
       }
 
-      function renderOutcomeBar(summary, observed) {
-        if (!observed) {
+      function renderOutcomeBar(summary) {
+        if (!summary.fullTotal) {
           return '<div class="bar"><span class="bar-skip" style="width:100%"></span></div>';
         }
         return (
           '<div class="bar">' +
-          '<span class="bar-pass" style="width:' + proportion(summary.passed, observed) + '%"></span>' +
-          '<span class="bar-flaky" style="width:' + proportion(summary.flaky, observed) + '%"></span>' +
-          '<span class="bar-fail" style="width:' + proportion(summary.failed, observed) + '%"></span>' +
-          '<span class="bar-skip" style="width:' + proportion(summary.skipped, observed) + '%"></span>' +
+          '<span class="bar-pass" style="width:' + proportion(summary.fullPassed, summary.fullTotal) + '%"></span>' +
+          '<span class="bar-flaky" style="width:' + proportion(summary.fullFlaky, summary.fullTotal) + '%"></span>' +
+          '<span class="bar-fail" style="width:' + proportion(summary.fullFailed, summary.fullTotal) + '%"></span>' +
           '</div>'
+        );
+      }
+
+      function renderFullBar(row) {
+        const total = number(row.full_runs);
+        if (!total) {
+          return '<div class="bar"><span class="bar-skip" style="width:100%"></span></div>';
+        }
+        const passed = Math.max(0, total - number(row.full_failed_runs) - number(row.full_flaky_runs));
+        return (
+          '<div class="bar"><span class="bar-pass" style="width:' +
+          proportion(passed, total) +
+          '%"></span><span class="bar-flaky" style="width:' +
+          proportion(number(row.full_flaky_runs), total) +
+          '%"></span><span class="bar-fail" style="width:' +
+          proportion(number(row.full_failed_runs), total) +
+          '%"></span></div>'
         );
       }
 
@@ -1200,10 +1326,10 @@ function buildIndexHtml() {
       }
 
       function healthClass(summary) {
-        if (summary.failed > 0) {
+        if (summary.fullFailed > 0 || summary.logFailed > 0) {
           return 'failed';
         }
-        if (summary.flaky > 0) {
+        if (summary.fullFlaky > 0 || summary.logFlaky > 0) {
           return 'flaky';
         }
         return 'passed';
@@ -1219,12 +1345,68 @@ function buildIndexHtml() {
         return platform || 'Unknown';
       }
 
-      function isFullResult(row) {
-        return (row.data_source || 'artifact_json') === 'artifact_json';
+      function failureSignals(row) {
+        return number(row.full_failed_runs) + number(row.log_failed_runs);
       }
 
-      function isLogSignal(row) {
-        return row.data_source === 'job_log_failure_summary';
+      function flakySignals(row) {
+        return number(row.full_flaky_runs) + number(row.log_flaky_runs);
+      }
+
+      function passRateSortValue(row) {
+        return row.pass_rate === '' ? 2 : number(row.pass_rate);
+      }
+
+      function fullPassLabel(row) {
+        return row.pass_rate === '' ? 'n/a full' : formatPercent(number(row.pass_rate)) + ' full';
+      }
+
+      function paginate(rows, page, pageSize) {
+        const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+        const safePage = Math.max(1, Math.min(page, totalPages));
+        const start = (safePage - 1) * pageSize;
+        return rows.slice(start, start + pageSize);
+      }
+
+      function rangeLabel(total, page, pageSize) {
+        if (!total) {
+          return '0';
+        }
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        const safePage = Math.max(1, Math.min(page, totalPages));
+        const start = (safePage - 1) * pageSize + 1;
+        const end = Math.min(total, start + pageSize - 1);
+        return start + '-' + end;
+      }
+
+      function renderPagination(containerId, { total, page, pageSize, onPage }) {
+        const container = document.getElementById(containerId);
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        const safePage = Math.max(1, Math.min(page, totalPages));
+        container.innerHTML =
+          '<button type="button" data-page="' +
+          (safePage - 1) +
+          '"' +
+          (safePage <= 1 ? ' disabled' : '') +
+          '>Previous</button>' +
+          '<span>Page ' +
+          safePage +
+          ' / ' +
+          totalPages +
+          '</span>' +
+          '<button type="button" data-page="' +
+          (safePage + 1) +
+          '"' +
+          (safePage >= totalPages ? ' disabled' : '') +
+          '>Next</button>';
+        for (const button of container.querySelectorAll('button[data-page]')) {
+          button.addEventListener('click', () => {
+            const nextPage = number(button.getAttribute('data-page'));
+            if (nextPage >= 1 && nextPage <= totalPages) {
+              onPage(nextPage);
+            }
+          });
+        }
       }
 
       function formatSource(value) {

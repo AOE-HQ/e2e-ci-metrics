@@ -81,7 +81,11 @@ describe('E2E CI metrics core', () => {
       pick(stats[0], [
         'total_runs',
         'full_runs',
+        'full_failed_runs',
+        'full_flaky_runs',
         'log_signal_runs',
+        'log_failed_runs',
+        'log_flaky_runs',
         'failed_runs',
         'flaky_runs',
         'attempt_failures',
@@ -95,7 +99,11 @@ describe('E2E CI metrics core', () => {
       {
         total_runs: '2',
         full_runs: '2',
+        full_failed_runs: '1',
+        full_flaky_runs: '1',
         log_signal_runs: '0',
+        log_failed_runs: '0',
+        log_flaky_runs: '0',
         failed_runs: '1',
         flaky_runs: '1',
         attempt_failures: '2',
@@ -113,7 +121,11 @@ describe('E2E CI metrics core', () => {
           'platform',
           'total_runs',
           'full_runs',
+          'full_failed_runs',
+          'full_flaky_runs',
           'log_signal_runs',
+          'log_failed_runs',
+          'log_flaky_runs',
           'failed_runs',
           'flaky_runs',
           'attempt_failures',
@@ -126,7 +138,11 @@ describe('E2E CI metrics core', () => {
           platform: 'macos',
           total_runs: '1',
           full_runs: '1',
+          full_failed_runs: '0',
+          full_flaky_runs: '1',
           log_signal_runs: '0',
+          log_failed_runs: '0',
+          log_flaky_runs: '0',
           failed_runs: '0',
           flaky_runs: '1',
           attempt_failures: '1',
@@ -137,7 +153,11 @@ describe('E2E CI metrics core', () => {
           platform: 'windows',
           total_runs: '1',
           full_runs: '1',
+          full_failed_runs: '1',
+          full_flaky_runs: '0',
           log_signal_runs: '0',
+          log_failed_runs: '0',
+          log_flaky_runs: '0',
           failed_runs: '1',
           flaky_runs: '0',
           attempt_failures: '1',
@@ -212,13 +232,32 @@ describe('E2E CI metrics core', () => {
     });
 
     const stats = readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats);
-    assert.deepEqual(pick(stats[0], ['total_runs', 'full_runs', 'log_signal_runs', 'failed_runs', 'pass_rate']), {
+    assert.deepEqual(
+      pick(stats[0], [
+        'total_runs',
+        'full_runs',
+        'full_failed_runs',
+        'full_flaky_runs',
+        'log_signal_runs',
+        'log_failed_runs',
+        'log_flaky_runs',
+        'failed_runs',
+        'flaky_runs',
+        'pass_rate',
+      ]),
+      {
       total_runs: '1',
       full_runs: '0',
+      full_failed_runs: '0',
+      full_flaky_runs: '0',
       log_signal_runs: '1',
+      log_failed_runs: '1',
+      log_flaky_runs: '0',
       failed_runs: '1',
+      flaky_runs: '0',
       pass_rate: '',
-    });
+      },
+    );
   });
 
   it('applies module tag overrides and current-run updates are idempotent', () => {

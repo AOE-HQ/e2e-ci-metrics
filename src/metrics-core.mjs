@@ -46,7 +46,11 @@ export const HEADERS = {
     'module_tags',
     'total_runs',
     'full_runs',
+    'full_failed_runs',
+    'full_flaky_runs',
     'log_signal_runs',
+    'log_failed_runs',
+    'log_flaky_runs',
     'failed_runs',
     'flaky_runs',
     'attempt_failures',
@@ -63,7 +67,11 @@ export const HEADERS = {
     'module_tags',
     'total_runs',
     'full_runs',
+    'full_failed_runs',
+    'full_flaky_runs',
     'log_signal_runs',
+    'log_failed_runs',
+    'log_flaky_runs',
     'failed_runs',
     'flaky_runs',
     'attempt_failures',
@@ -502,6 +510,27 @@ export function updateMetrics({ repoRoot, reports = [], results = [], run, artif
   };
 }
 
+export function recomputeAggregateTables({ repoRoot }) {
+  ensureTables(repoRoot);
+
+  const runsPath = path.join(repoRoot, 'data', 'runs.csv');
+  const routeResultsPath = path.join(repoRoot, 'data', 'route_results.csv');
+  const routesPath = path.join(repoRoot, 'data', 'routes.csv');
+  const routeStatsPath = path.join(repoRoot, 'data', 'route_stats.csv');
+  const routePlatformStatsPath = path.join(repoRoot, 'data', 'route_platform_stats.csv');
+
+  const runs = readTable(runsPath, HEADERS.runs);
+  const routeResults = readTable(routeResultsPath, HEADERS.routeResults);
+  const routes = readTable(routesPath, HEADERS.routes);
+
+  writeTable(routeStatsPath, HEADERS.routeStats, computeRouteStats({ routes, routeResults, runs }));
+  writeTable(
+    routePlatformStatsPath,
+    HEADERS.routePlatformStats,
+    computeRoutePlatformStats({ routes, routeResults, runs }),
+  );
+}
+
 export function updateMetricsWithGit({ repoRoot, reports, run, artifactUrl, commitMessage, push, pushRetries }) {
   const attempts = Math.max(1, Number(pushRetries || 1));
   let lastError = null;
@@ -757,6 +786,9 @@ function computeRouteStats({ routes, routeResults, runs }) {
     const failed = results.filter((result) => result.outcome === 'failed');
     const flaky = results.filter((result) => result.outcome === 'flaky');
     const fullFailed = fullNonSkipped.filter((result) => result.outcome === 'failed');
+    const fullFlaky = fullNonSkipped.filter((result) => result.outcome === 'flaky');
+    const logFailed = logSignals.filter((result) => result.outcome === 'failed');
+    const logFlaky = logSignals.filter((result) => result.outcome === 'flaky');
     const latest = [...results].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const latestFailed = [...failed].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const totalRuns = nonSkipped.length;
@@ -767,7 +799,11 @@ function computeRouteStats({ routes, routeResults, runs }) {
       module_tags: routeById.get(routeId)?.module_tags ?? '',
       total_runs: String(totalRuns),
       full_runs: String(fullRuns),
+      full_failed_runs: String(fullFailed.length),
+      full_flaky_runs: String(fullFlaky.length),
       log_signal_runs: String(logSignals.length),
+      log_failed_runs: String(logFailed.length),
+      log_flaky_runs: String(logFlaky.length),
       failed_runs: String(failed.length),
       flaky_runs: String(flaky.length),
       attempt_failures: String(sum(results.map((result) => Number(result.attempt_failures || 0)))),
@@ -806,6 +842,9 @@ export function computeRoutePlatformStats({ routes, routeResults, runs }) {
     const failed = results.filter((result) => result.outcome === 'failed');
     const flaky = results.filter((result) => result.outcome === 'flaky');
     const fullFailed = fullNonSkipped.filter((result) => result.outcome === 'failed');
+    const fullFlaky = fullNonSkipped.filter((result) => result.outcome === 'flaky');
+    const logFailed = logSignals.filter((result) => result.outcome === 'failed');
+    const logFlaky = logSignals.filter((result) => result.outcome === 'flaky');
     const latest = [...results].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const latestFailed = [...failed].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const totalRuns = nonSkipped.length;
@@ -817,7 +856,11 @@ export function computeRoutePlatformStats({ routes, routeResults, runs }) {
       module_tags: routeById.get(routeId)?.module_tags ?? '',
       total_runs: String(totalRuns),
       full_runs: String(fullRuns),
+      full_failed_runs: String(fullFailed.length),
+      full_flaky_runs: String(fullFlaky.length),
       log_signal_runs: String(logSignals.length),
+      log_failed_runs: String(logFailed.length),
+      log_flaky_runs: String(logFlaky.length),
       failed_runs: String(failed.length),
       flaky_runs: String(flaky.length),
       attempt_failures: String(sum(results.map((result) => Number(result.attempt_failures || 0)))),

@@ -55,7 +55,11 @@
 | `module_tags` | Semicolon-separated product module tags. |
 | `total_runs` | Count of all non-skipped route result rows, including log-recovered failure signals. |
 | `full_runs` | Count of non-skipped full Playwright JSON observations. This is the denominator for `pass_rate`. |
+| `full_failed_runs` | Count of final failed full Playwright JSON observations. |
+| `full_flaky_runs` | Count of retry-recovered flaky full Playwright JSON observations. |
 | `log_signal_runs` | Count of failure-only rows recovered from GitHub job logs after JSON artifacts were unavailable. |
+| `log_failed_runs` | Count of final failed rows recovered from GitHub job logs. |
+| `log_flaky_runs` | Count of retry-recovered flaky rows recovered from GitHub job logs. |
 | `failed_runs` | Count of final failed route result rows, including log-recovered failures. |
 | `flaky_runs` | Count of retry-recovered route result rows, including log-recovered flaky signals. |
 | `attempt_failures` | Sum of raw failed attempts. |
@@ -75,7 +79,11 @@
 | `module_tags` | Semicolon-separated product module tags. |
 | `total_runs` | Count of all non-skipped route result rows for this route on this platform. |
 | `full_runs` | Count of non-skipped full Playwright JSON observations for this route on this platform. |
+| `full_failed_runs` | Count of final failed full Playwright JSON observations for this route on this platform. |
+| `full_flaky_runs` | Count of retry-recovered flaky full Playwright JSON observations for this route on this platform. |
 | `log_signal_runs` | Count of failure-only rows recovered from GitHub job logs for this route on this platform. |
+| `log_failed_runs` | Count of final failed rows recovered from GitHub job logs for this route on this platform. |
+| `log_flaky_runs` | Count of retry-recovered flaky rows recovered from GitHub job logs for this route on this platform. |
 | `failed_runs` | Count of final failed route result rows for this route on this platform, including log-recovered failures. |
 | `flaky_runs` | Count of retry-recovered route result rows for this route on this platform, including log-recovered flaky signals. |
 | `attempt_failures` | Sum of raw failed attempts for this route on this platform. |
