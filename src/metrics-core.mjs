@@ -86,6 +86,8 @@ export const HEADERS = {
 const FAILED_ATTEMPT_STATUSES = new Set(['failed', 'timedOut', 'interrupted']);
 export const ARTIFACT_JSON_SOURCE = 'artifact_json';
 export const JOB_LOG_FAILURE_SOURCE = 'job_log_failure_summary';
+export const JOB_LOG_ROUTE_METRIC_SOURCE = 'job_log_route_metric';
+const JOB_LOG_ROUTE_METRIC_PREFIX = 'E2E_ROUTE_METRIC';
 
 const MODULE_TAG_RULES = [
   ['automation', ['automation-*', 'floatboat-calendar-*', 'task-copy-*']],
@@ -376,6 +378,16 @@ export function extractRouteResultsFromJobLog(logText, { platform, artifactUrl =
     .replace(/\x1B\[[0-9;]*m/g, '')
     .split(/\r?\n/)
     .map(normalizeGithubLogLine);
+  const routeMetricResults = extractRouteMetricResultsFromLines(lines, { platform, artifactUrl });
+  if (routeMetricResults.length > 0) {
+    return routeMetricResults;
+  }
+
+  const listReporterResults = extractListReporterResultsFromLines(lines, { platform, artifactUrl });
+  if (listReporterResults.length > 0) {
+    return listReporterResults;
+  }
+
   const detailErrors = collectJobLogErrorSignatures(lines);
   const results = [];
   const seen = new Set();
@@ -439,62 +451,312 @@ export function extractRouteResultsFromJobLog(logText, { platform, artifactUrl =
   return results;
 }
 
+function extractListReporterResultsFromLines(lines, { platform, artifactUrl }) {
+  const attemptsByRoute = new Map();
+  let lastElectronAttemptIndex = -1;
+
+  for (const [index, line] of lines.entries()) {
+    const attempt = parseListReporterAttemptLine(line);
+    if (!attempt || attempt.project !== 'electron') {
+      continue;
+    }
+
+    const routeId = buildRouteId(attempt.specFile, attempt.titlePath);
+    const entry = attemptsByRoute.get(routeId) ?? {
+      routeId,
+      specFile: attempt.specFile,
+      titlePath: attempt.titlePath,
+      attempts: [],
+    };
+    entry.attempts.push(attempt);
+    attemptsByRoute.set(routeId, entry);
+    lastElectronAttemptIndex = index;
+  }
+
+  if (attemptsByRoute.size === 0) {
+    return [];
+  }
+
+  const summaries = [...attemptsByRoute.values()].map(summarizeListReporterAttempts);
+  if (!listReporterFooterMatches(lines, lastElectronAttemptIndex, summaries)) {
+    return [];
+  }
+
+  const detailErrors = collectJobLogErrorSignatures(lines);
+  return summaries.map((summary) => ({
+    platform,
+    project: 'electron',
+    route_id: summary.routeId,
+    spec_file: summary.specFile,
+    spec_basename: path.posix.basename(summary.specFile),
+    title_path: summary.titlePath,
+    outcome: summary.outcome,
+    duration_ms: summary.durationMs === null ? '' : String(summary.durationMs),
+    retry_count: String(summary.retryCount),
+    attempt_failures: String(summary.attemptFailures),
+    error_signature: detailErrors.get(summary.routeId) ?? '',
+    artifact_url: artifactUrl,
+    data_source: JOB_LOG_ROUTE_METRIC_SOURCE,
+  }));
+}
+
+function parseListReporterAttemptLine(line) {
+  const match = String(line ?? '').match(
+    /^\s*(✓|✘|×|ok|x|-)\s+\d+\s+\[([^\]]+)\]\s+›\s+(.+?\.spec\.ts):\d+:\d+\s+›\s+(.+?)\s*$/,
+  );
+  if (!match) {
+    return null;
+  }
+
+  let title = match[4].trim();
+  const durationMatch = title.match(/\s+\((\d+(?:\.\d+)?)\s*(ms|s|m|h)\)$/i);
+  const durationMs = durationMatch ? durationToMilliseconds(durationMatch[1], durationMatch[2]) : null;
+  if (durationMatch) {
+    title = title.slice(0, durationMatch.index).trim();
+  }
+
+  const retryMatch = title.match(/\s+\(retry #(\d+)\)$/i);
+  const retryNumber = retryMatch ? Number(retryMatch[1]) : 0;
+  if (retryMatch) {
+    title = title.slice(0, retryMatch.index).trim();
+  }
+
+  const marker = match[1].toLowerCase();
+  let status = 'failed';
+  if (marker === '✓' || marker === 'ok') {
+    status = 'passed';
+  } else if (marker === '-') {
+    status = 'skipped';
+  }
+
+  return {
+    project: match[2],
+    specFile: path.posix.basename(normalizeSpecFile(match[3])),
+    titlePath: title
+      .split(/\s+›\s+/)
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .join(' > '),
+    status,
+    retryNumber,
+    durationMs,
+  };
+}
+
+function summarizeListReporterAttempts(entry) {
+  const attemptFailures = entry.attempts.filter((attempt) => attempt.status === 'failed').length;
+  const lastAttempt = entry.attempts.at(-1);
+  let outcome = lastAttempt?.status ?? 'failed';
+  if (lastAttempt?.status === 'passed' && attemptFailures > 0) {
+    outcome = 'flaky';
+  }
+
+  const durations = entry.attempts.map((attempt) => attempt.durationMs).filter((value) => value !== null);
+  const durationMs = durations.length > 0 ? sum(durations) : null;
+  const retryCount = Math.max(
+    entry.attempts.length - 1,
+    ...entry.attempts.map((attempt) => attempt.retryNumber),
+  );
+
+  return {
+    ...entry,
+    outcome,
+    durationMs,
+    retryCount,
+    attemptFailures,
+  };
+}
+
+function listReporterFooterMatches(lines, lastElectronAttemptIndex, summaries) {
+  const expected = { passed: 0, failed: 0, flaky: 0, skipped: 0 };
+  for (const summary of summaries) {
+    expected[summary.outcome] += 1;
+  }
+
+  const actual = { passed: 0, failed: 0, flaky: 0, skipped: 0 };
+  let sawSummary = false;
+
+  for (let index = lastElectronAttemptIndex + 1; index < lines.length; index += 1) {
+    const nextAttempt = parseListReporterAttemptLine(lines[index]);
+    if (nextAttempt && nextAttempt.project !== 'electron') {
+      break;
+    }
+
+    const match = lines[index].trim().match(/^(\d+)\s+(passed|failed|flaky|skipped|did not run)\b/i);
+    if (!match) {
+      continue;
+    }
+    const key = match[2].toLowerCase();
+    if (key === 'did not run') {
+      actual.skipped += Number(match[1]);
+    } else {
+      actual[key] = Number(match[1]);
+    }
+    sawSummary = true;
+  }
+
+  return (
+    sawSummary &&
+    actual.passed === expected.passed &&
+    actual.failed === expected.failed &&
+    actual.flaky === expected.flaky &&
+    actual.skipped === expected.skipped
+  );
+}
+
+function durationToMilliseconds(value, unit) {
+  const amount = Number(value);
+  if (unit.toLowerCase() === 'h') {
+    return Math.round(amount * 60 * 60 * 1000);
+  }
+  if (unit.toLowerCase() === 'm') {
+    return Math.round(amount * 60 * 1000);
+  }
+  if (unit.toLowerCase() === 's') {
+    return Math.round(amount * 1000);
+  }
+  return Math.round(amount);
+}
+
+function extractRouteMetricResultsFromLines(lines, { platform, artifactUrl }) {
+  const resultsByRoute = new Map();
+  let lastMetricIndex = -1;
+
+  for (const [index, line] of lines.entries()) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(`${JOB_LOG_ROUTE_METRIC_PREFIX} `)) {
+      continue;
+    }
+
+    const payloadText = trimmed.slice(JOB_LOG_ROUTE_METRIC_PREFIX.length).trim();
+    let payload;
+    try {
+      payload = JSON.parse(payloadText);
+    } catch {
+      continue;
+    }
+    if (!payload || typeof payload !== 'object') {
+      continue;
+    }
+
+    const result = normalizeExtractedResult({
+      ...payload,
+      platform: payload.platform ?? platform,
+      artifact_url: payload.artifact_url ?? artifactUrl,
+      data_source: JOB_LOG_ROUTE_METRIC_SOURCE,
+    });
+
+    if (!result.platform || result.project !== 'electron' || !result.route_id || !result.spec_file || !result.title_path) {
+      continue;
+    }
+    if (!['passed', 'failed', 'flaky', 'skipped'].includes(result.outcome)) {
+      continue;
+    }
+
+    const dedupeKey = `${result.platform}\0${result.project}\0${result.route_id}`;
+    resultsByRoute.set(dedupeKey, {
+      ...result,
+      error_signature: result.error_signature ? normalizeErrorSignature(result.error_signature) : '',
+    });
+    lastMetricIndex = index;
+  }
+
+  const results = [...resultsByRoute.values()];
+  return results.length > 0 && listReporterFooterMatches(lines, lastMetricIndex, results) ? results : [];
+}
+
 export function updateMetrics({ repoRoot, reports = [], results = [], run, artifactUrl = '' }) {
+  return updateMetricsBatch({
+    repoRoot,
+    updates: [{ reports, results, run, artifactUrl }],
+  });
+}
+
+export function updateMetricsBatch({ repoRoot, updates = [] }) {
   ensureTables(repoRoot);
 
   const overrides = loadOverrides(repoRoot);
-  const extractedResults = [
-    ...reports.flatMap((report) =>
-      extractRouteResultsFromReport(report.path, {
-        platform: report.platform,
-        artifactUrl: report.artifactUrl ?? artifactUrl,
-      }),
-    ),
-    ...results.map(normalizeExtractedResult),
-  ];
-
-  const runKey = getRunKey(run);
-  const runRow = normalizeRun({
-    ...run,
-    data_source: run.data_source ?? summarizeDataSources(extractedResults),
-  });
-
   const runsPath = path.join(repoRoot, 'data', 'runs.csv');
   const routeResultsPath = path.join(repoRoot, 'data', 'route_results.csv');
   const routesPath = path.join(repoRoot, 'data', 'routes.csv');
   const routeStatsPath = path.join(repoRoot, 'data', 'route_stats.csv');
   const routePlatformStatsPath = path.join(repoRoot, 'data', 'route_platform_stats.csv');
 
-  const existingRuns = readTable(runsPath, HEADERS.runs).filter((row) => getRunKey(row) !== runKey);
-  const runs = [...existingRuns, runRow].sort(compareRunRows);
+  let runs = readTable(runsPath, HEADERS.runs);
+  let routeResults = readTable(routeResultsPath, HEADERS.routeResults);
+  let routes = readTable(routesPath, HEADERS.routes);
+  let routesUpdated = 0;
+  let reportsRead = 0;
 
-  const existingResults = readTable(routeResultsPath, HEADERS.routeResults).filter(
-    (row) => getRunKey(row) !== runKey,
-  );
-  const routeResults = [
-    ...existingResults,
-    ...extractedResults.map((result) => ({
-      run_id: runRow.run_id,
-      run_attempt: runRow.run_attempt,
-      platform: result.platform,
-      project: result.project,
-      route_id: result.route_id,
-      outcome: result.outcome,
-      duration_ms: result.duration_ms,
-      retry_count: result.retry_count,
-      attempt_failures: result.attempt_failures,
-      error_signature: result.error_signature,
-      artifact_url: result.artifact_url,
-      data_source: result.data_source,
-    })),
-  ].sort(compareRouteResultRows);
+  for (const update of updates) {
+    const reports = update.reports ?? [];
+    const results = update.results ?? [];
+    const artifactUrl = update.artifactUrl ?? '';
+    const extractedResults = [
+      ...reports.flatMap((report) =>
+        extractRouteResultsFromReport(report.path, {
+          platform: report.platform,
+          artifactUrl: report.artifactUrl ?? artifactUrl,
+        }),
+      ),
+      ...results.map(normalizeExtractedResult),
+    ];
+    const baseRunRow = normalizeRun({ ...update.run, data_source: '' });
+    const runKey = getRunKey(baseRunRow);
+    const existingRun = runs.find((row) => getRunKey(row) === runKey);
+    const existingRunResults = routeResults.filter((row) => getRunKey(row) === runKey);
+    const incomingByPlatform = groupResultsByPlatform(extractedResults);
+    const existingByPlatform = groupResultsByPlatform(existingRunResults);
+    const replacePlatforms = new Set();
 
-  const routes = mergeRoutes({
-    existingRoutes: readTable(routesPath, HEADERS.routes),
-    extractedResults,
-    completedAt: runRow.completed_at,
-    overrides,
-  });
+    for (const [platform, incomingPlatformResults] of incomingByPlatform) {
+      const incomingPriority = platformResultPriority(incomingPlatformResults);
+      const existingPriority = platformResultPriority(existingByPlatform.get(platform) ?? []);
+      if (incomingPriority >= existingPriority) {
+        replacePlatforms.add(platform);
+      }
+    }
+
+    const acceptedResults = extractedResults.filter((result) => replacePlatforms.has(result.platform));
+    routeResults = [
+      ...routeResults.filter((row) => getRunKey(row) !== runKey),
+      ...existingRunResults.filter((row) => !replacePlatforms.has(row.platform)),
+      ...acceptedResults.map((result) => ({
+        run_id: baseRunRow.run_id,
+        run_attempt: baseRunRow.run_attempt,
+        platform: result.platform,
+        project: result.project,
+        route_id: result.route_id,
+        outcome: result.outcome,
+        duration_ms: result.duration_ms,
+        retry_count: result.retry_count,
+        attempt_failures: result.attempt_failures,
+        error_signature: result.error_signature,
+        artifact_url: result.artifact_url,
+        data_source: result.data_source,
+      })),
+    ];
+    const mergedRunResults = routeResults.filter((row) => getRunKey(row) === runKey);
+    const runRow = normalizeRun({
+      ...existingRun,
+      ...update.run,
+      pr_number: update.run.pr_number || update.run.prNumber || existingRun?.pr_number || '',
+      data_source:
+        summarizeDataSources(mergedRunResults) || update.run.data_source || existingRun?.data_source || '',
+    });
+    runs = [...runs.filter((row) => getRunKey(row) !== runKey), runRow];
+    routes = mergeRoutes({
+      existingRoutes: routes,
+      extractedResults,
+      completedAt: runRow.completed_at,
+      overrides,
+    });
+    routesUpdated += extractedResults.length;
+    reportsRead += reports.length;
+  }
+
+  runs.sort(compareRunRows);
+  routeResults.sort(compareRouteResultRows);
   const stats = computeRouteStats({ routes, routeResults, runs });
   const platformStats = computeRoutePlatformStats({ routes, routeResults, runs });
 
@@ -505,8 +767,8 @@ export function updateMetrics({ repoRoot, reports = [], results = [], run, artif
   writeTable(routePlatformStatsPath, HEADERS.routePlatformStats, platformStats);
 
   return {
-    routesUpdated: extractedResults.length,
-    reportsRead: reports.length,
+    routesUpdated,
+    reportsRead,
   };
 }
 
@@ -531,7 +793,7 @@ export function recomputeAggregateTables({ repoRoot }) {
   );
 }
 
-export function updateMetricsWithGit({ repoRoot, reports, run, artifactUrl, commitMessage, push, pushRetries }) {
+export function updateMetricsWithGit({ repoRoot, reports, results, run, artifactUrl, commitMessage, push, pushRetries }) {
   const attempts = Math.max(1, Number(pushRetries || 1));
   let lastError = null;
 
@@ -542,7 +804,7 @@ export function updateMetricsWithGit({ repoRoot, reports, run, artifactUrl, comm
         git(repoRoot, ['reset', '--hard', 'origin/main']);
       }
 
-      const summary = updateMetrics({ repoRoot, reports, run, artifactUrl });
+      const summary = updateMetrics({ repoRoot, reports, results, run, artifactUrl });
       git(repoRoot, ['add', 'data', 'config']);
 
       if (gitQuiet(repoRoot, ['diff', '--cached', '--quiet'])) {
@@ -743,6 +1005,33 @@ function summarizeDataSources(results) {
   return sources.join(';');
 }
 
+function groupResultsByPlatform(results) {
+  const grouped = new Map();
+  for (const result of results) {
+    const platform = String(result.platform ?? '');
+    if (!platform) {
+      continue;
+    }
+    if (!grouped.has(platform)) {
+      grouped.set(platform, []);
+    }
+    grouped.get(platform).push(result);
+  }
+  return grouped;
+}
+
+function platformResultPriority(results) {
+  return results.reduce((priority, result) => {
+    if (result.data_source === JOB_LOG_ROUTE_METRIC_SOURCE) {
+      return Math.max(priority, 2);
+    }
+    if (result.data_source === JOB_LOG_FAILURE_SOURCE) {
+      return Math.max(priority, 1);
+    }
+    return priority;
+  }, 0);
+}
+
 function mergeRoutes({ existingRoutes, extractedResults, completedAt, overrides }) {
   const routes = new Map(existingRoutes.map((row) => [row.route_id, { ...row }]));
 
@@ -766,7 +1055,50 @@ function mergeRoutes({ existingRoutes, extractedResults, completedAt, overrides 
   return [...routes.values()].sort((a, b) => a.route_id.localeCompare(b.route_id));
 }
 
-function computeRouteStats({ routes, routeResults, runs }) {
+export function computeWindowedMetrics({ routes, routeResults, runs, asOf, windows }) {
+  const asOfTime = new Date(asOf).getTime();
+  if (!Number.isFinite(asOfTime)) {
+    throw new Error(`Invalid metrics window asOf timestamp: ${asOf}`);
+  }
+
+  const runTimeByKey = new Map(
+    runs.map((run) => [getRunKey(run), new Date(run.completed_at).getTime()]),
+  );
+  const output = {};
+
+  for (const window of windows) {
+    const key = String(window.key ?? '');
+    const durationMs = Number(window.durationMs);
+    if (!key || !Number.isFinite(durationMs) || durationMs <= 0) {
+      throw new Error(`Invalid metrics window definition: ${JSON.stringify(window)}`);
+    }
+    if (output[key]) {
+      throw new Error(`Duplicate metrics window key: ${key}`);
+    }
+
+    const sinceTime = asOfTime - durationMs;
+    const windowRuns = runs.filter((run) => {
+      const completedAt = runTimeByKey.get(getRunKey(run));
+      return Number.isFinite(completedAt) && completedAt >= sinceTime && completedAt <= asOfTime;
+    });
+    const runKeys = new Set(windowRuns.map(getRunKey));
+    const windowResults = routeResults.filter((result) => runKeys.has(getRunKey(result)));
+
+    output[key] = {
+      since: new Date(sinceTime).toISOString(),
+      routeStats: computeRouteStats({ routes, routeResults: windowResults, runs: windowRuns }),
+      routePlatformStats: computeRoutePlatformStats({
+        routes,
+        routeResults: windowResults,
+        runs: windowRuns,
+      }),
+    };
+  }
+
+  return { asOf: new Date(asOfTime).toISOString(), windows: output };
+}
+
+export function computeRouteStats({ routes, routeResults, runs }) {
   const routeById = new Map(routes.map((route) => [route.route_id, route]));
   const runByKey = new Map(runs.map((run) => [getRunKey(run), run]));
   const grouped = new Map();
@@ -780,16 +1112,20 @@ function computeRouteStats({ routes, routeResults, runs }) {
 
   const stats = [];
   for (const [routeId, results] of grouped) {
-    const nonSkipped = results.filter((result) => result.outcome !== 'skipped');
+    const metricResults = results.filter(isLogSignal);
+    if (metricResults.length === 0) {
+      continue;
+    }
+    const nonSkipped = metricResults.filter((result) => result.outcome !== 'skipped');
     const fullNonSkipped = nonSkipped.filter(isFullObservation);
-    const logSignals = nonSkipped.filter(isLogSignal);
-    const failed = results.filter((result) => result.outcome === 'failed');
-    const flaky = results.filter((result) => result.outcome === 'flaky');
+    const logSignals = nonSkipped;
+    const failed = metricResults.filter((result) => result.outcome === 'failed');
+    const flaky = metricResults.filter((result) => result.outcome === 'flaky');
     const fullFailed = fullNonSkipped.filter((result) => result.outcome === 'failed');
     const fullFlaky = fullNonSkipped.filter((result) => result.outcome === 'flaky');
     const logFailed = logSignals.filter((result) => result.outcome === 'failed');
     const logFlaky = logSignals.filter((result) => result.outcome === 'flaky');
-    const latest = [...results].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
+    const latest = [...metricResults].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const latestFailed = [...failed].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const totalRuns = nonSkipped.length;
     const fullRuns = fullNonSkipped.length;
@@ -806,13 +1142,14 @@ function computeRouteStats({ routes, routeResults, runs }) {
       log_flaky_runs: String(logFlaky.length),
       failed_runs: String(failed.length),
       flaky_runs: String(flaky.length),
-      attempt_failures: String(sum(results.map((result) => Number(result.attempt_failures || 0)))),
-      pass_rate: fullRuns === 0 ? '' : ((fullRuns - fullFailed.length) / fullRuns).toFixed(4),
+      attempt_failures: String(sum(metricResults.map((result) => Number(result.attempt_failures || 0)))),
+      pass_rate:
+        fullRuns === 0 ? '' : ((fullRuns - fullFailed.length - fullFlaky.length) / fullRuns).toFixed(4),
       failed_runs_macos: String(failed.filter((result) => result.platform === 'macos').length),
       failed_runs_windows: String(failed.filter((result) => result.platform === 'windows').length),
       last_outcome: latest?.outcome ?? '',
       last_failed_at: latestFailed ? (runByKey.get(getRunKey(latestFailed))?.completed_at ?? '') : '',
-      top_error_signature: topErrorSignature(results),
+      top_error_signature: topErrorSignature(metricResults),
     });
   }
 
@@ -836,16 +1173,20 @@ export function computeRoutePlatformStats({ routes, routeResults, runs }) {
   for (const results of grouped.values()) {
     const routeId = results[0]?.route_id ?? '';
     const platform = results[0]?.platform ?? '';
-    const nonSkipped = results.filter((result) => result.outcome !== 'skipped');
+    const metricResults = results.filter(isLogSignal);
+    if (metricResults.length === 0) {
+      continue;
+    }
+    const nonSkipped = metricResults.filter((result) => result.outcome !== 'skipped');
     const fullNonSkipped = nonSkipped.filter(isFullObservation);
-    const logSignals = nonSkipped.filter(isLogSignal);
-    const failed = results.filter((result) => result.outcome === 'failed');
-    const flaky = results.filter((result) => result.outcome === 'flaky');
+    const logSignals = nonSkipped;
+    const failed = metricResults.filter((result) => result.outcome === 'failed');
+    const flaky = metricResults.filter((result) => result.outcome === 'flaky');
     const fullFailed = fullNonSkipped.filter((result) => result.outcome === 'failed');
     const fullFlaky = fullNonSkipped.filter((result) => result.outcome === 'flaky');
     const logFailed = logSignals.filter((result) => result.outcome === 'failed');
     const logFlaky = logSignals.filter((result) => result.outcome === 'flaky');
-    const latest = [...results].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
+    const latest = [...metricResults].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const latestFailed = [...failed].sort((a, b) => compareResultByRunTime(a, b, runByKey)).at(-1);
     const totalRuns = nonSkipped.length;
     const fullRuns = fullNonSkipped.length;
@@ -863,11 +1204,12 @@ export function computeRoutePlatformStats({ routes, routeResults, runs }) {
       log_flaky_runs: String(logFlaky.length),
       failed_runs: String(failed.length),
       flaky_runs: String(flaky.length),
-      attempt_failures: String(sum(results.map((result) => Number(result.attempt_failures || 0)))),
-      pass_rate: fullRuns === 0 ? '' : ((fullRuns - fullFailed.length) / fullRuns).toFixed(4),
+      attempt_failures: String(sum(metricResults.map((result) => Number(result.attempt_failures || 0)))),
+      pass_rate:
+        fullRuns === 0 ? '' : ((fullRuns - fullFailed.length - fullFlaky.length) / fullRuns).toFixed(4),
       last_outcome: latest?.outcome ?? '',
       last_failed_at: latestFailed ? (runByKey.get(getRunKey(latestFailed))?.completed_at ?? '') : '',
-      top_error_signature: topErrorSignature(results),
+      top_error_signature: topErrorSignature(metricResults),
     });
   }
 
@@ -876,11 +1218,11 @@ export function computeRoutePlatformStats({ routes, routeResults, runs }) {
 
 function isFullObservation(result) {
   const source = result.data_source || ARTIFACT_JSON_SOURCE;
-  return source === ARTIFACT_JSON_SOURCE;
+  return source === JOB_LOG_ROUTE_METRIC_SOURCE;
 }
 
 function isLogSignal(result) {
-  return result.data_source === JOB_LOG_FAILURE_SOURCE;
+  return result.data_source === JOB_LOG_ROUTE_METRIC_SOURCE || result.data_source === JOB_LOG_FAILURE_SOURCE;
 }
 
 function normalizeRun(run) {
