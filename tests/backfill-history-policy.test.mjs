@@ -56,6 +56,7 @@ describe('backfill history policy', () => {
     assert.doesNotMatch(source, /repos\/\$\{repo\}\/actions\/artifacts/);
     assert.match(source, /actions\/runs\/\$\{runId\}\/artifacts/);
     assert.match(source, /actions\/runs\/\$\{runId\}\/attempts\/\$\{attempt\}\/jobs/);
+    assert.match(source, /'--attempt',\s*String\(attempt\)/s);
     assert.match(
       source,
       /isTerminalSource\(\s*existingSource,\s*\{ isLatestAttempt: run\.isLatestAttempt \}\s*\)/s,

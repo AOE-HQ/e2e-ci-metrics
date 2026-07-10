@@ -300,6 +300,20 @@ function summarizeDataSources(results) {
 }
 
 function listE2eTestJobs({ repo, runId, attempt }) {
+  try {
+    const jobs = listE2eTestJobsWithApi({ repo, runId, attempt });
+    if (jobs.length > 0) {
+      return jobs;
+    }
+  } catch (error) {
+    console.warn(
+      `Run ${runId} attempt ${attempt}: could not list jobs through the Actions jobs API; trying gh run view. ${error.message}`,
+    );
+  }
+  return listE2eTestJobsWithRunView({ repo, runId, attempt });
+}
+
+function listE2eTestJobsWithApi({ repo, runId, attempt }) {
   const jobs = [];
   let page = 1;
 
@@ -333,6 +347,37 @@ function listE2eTestJobs({ repo, runId, attempt }) {
   }
 
   return jobs;
+}
+
+function listE2eTestJobsWithRunView({ repo, runId, attempt }) {
+  const output = execFileSync(
+    'gh',
+    [
+      'run',
+      'view',
+      String(runId),
+      '--repo',
+      repo,
+      '--attempt',
+      String(attempt),
+      '--json',
+      'jobs',
+    ],
+    {
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+  const response = JSON.parse(output);
+  return (response.jobs ?? [])
+    .map((job) => ({
+      databaseId: job.databaseId ?? job.id,
+      name: job.name,
+      conclusion: job.conclusion,
+      url: job.url ?? '',
+      platform: inferPlatformFromJobName(job.name),
+    }))
+    .filter((job) => job.databaseId && job.platform);
 }
 
 function inferPlatformFromJobName(name) {

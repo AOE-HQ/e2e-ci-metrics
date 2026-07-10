@@ -12,7 +12,7 @@ describe('daily summary workflow contract', () => {
     assert.match(source, /schedule:\s*\r?\n\s*- cron: ['"]\d+ \d+ \* \* \*['"]/);
     assert.match(source, /workflow_dispatch:/);
     assert.match(source, /since:/);
-    assert.match(source, /group: e2e-metrics-daily-summary/);
+    assert.match(source, /group: e2e-ci-metrics-writer/);
     assert.match(source, /cancel-in-progress: false/);
     assert.match(source, /if: github\.ref == ['"]refs\/heads\/main['"]/);
     assert.match(source, /ref: main/);

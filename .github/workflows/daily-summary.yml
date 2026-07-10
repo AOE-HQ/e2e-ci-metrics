@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: e2e-metrics-daily-summary
+  group: e2e-ci-metrics-writer
   cancel-in-progress: false
 
 jobs:
