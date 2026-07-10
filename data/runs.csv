@@ -3508,7 +3508,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29014210239,1,5139,CI,fix/20260709-0732,5fc51201b3883ec7e08b66d79602449e811c9ca1,pull_request,1828,2026-07-09T11:14:34Z,2026-07-09T12:52:38Z,failure,job_log_route_metric
 29020612214,1,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,1805,2026-07-09T13:13:46Z,2026-07-09T14:35:17Z,cancelled,job_log_route_metric
 29021301605,1,5143,CI,fix/20260708-0718,571dda38e86991b1415c71c628c533418189f078,pull_request,,2026-07-09T13:25:54Z,2026-07-09T14:55:05Z,success,job_log_failure_summary;job_log_route_metric
-29020612214,2,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,1805,2026-07-09T14:43:23Z,2026-07-09T15:24:35Z,failure,job_log_failure_summary
+29020612214,2,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,1805,2026-07-09T14:43:23Z,2026-07-09T15:24:35Z,failure,job_log_route_metric
 29024762746,1,5144,CI,fix/20260709-0734,768bde27edca8dd01ce254882817372816cd3cd6,pull_request,1831,2026-07-09T14:17:28Z,2026-07-09T15:39:32Z,failure,job_log_route_metric
 29029298594,1,5145,CI,fix/20260616-0486,6f2135cac2595bb62d21d34fa28e0df3d4a358bb,pull_request,1832,2026-07-09T15:23:24Z,2026-07-09T16:51:12Z,failure,job_log_failure_summary;job_log_route_metric
 29033098386,1,5146,CI,fix/20260616-0489,624461ee1230b4d6ac96678a350666bd6141a2e8,pull_request,,2026-07-09T16:21:29Z,2026-07-09T17:40:10Z,success,job_log_route_metric
@@ -3523,7 +3523,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29047600174,1,5154,CI,fix/20260617-0512,ac58881d09bbcd8b973e2e522b2eb5e77c162bf2,pull_request,1840,2026-07-09T20:21:23Z,2026-07-09T21:49:24Z,success,job_log_failure_summary;job_log_route_metric
 29053159898,1,5159,CI,fix/20260617-0523,0d5adfe65c0a1d0e761aae331018d75bf24b290c,pull_request,1844,2026-07-09T21:59:25Z,2026-07-09T22:08:26Z,cancelled,unavailable_job_log
 29050156076,1,5156,CI,fix/20260617-0515,dad6e856251caaf12cd4a144f98a39a9afe680a3,pull_request,1841,2026-07-09T21:04:56Z,2026-07-09T22:24:46Z,success,job_log_route_metric
-29050439047,1,5157,CI,fix/20260617-0518,211ac91ddf219ad0c322927178857ba5b0bb9369,pull_request,,2026-07-09T21:09:49Z,2026-07-09T22:26:53Z,failure,job_log_failure_summary
+29050439047,1,5157,CI,fix/20260617-0518,211ac91ddf219ad0c322927178857ba5b0bb9369,pull_request,,2026-07-09T21:09:49Z,2026-07-09T22:26:53Z,failure,job_log_route_metric
 29054481985,1,5161,CI,fix/20260618-0530,833283c9000324440bd0d84048f290cf06aed44d,pull_request,,2026-07-09T22:25:39Z,2026-07-09T22:29:34Z,cancelled,unavailable_job_log
 29052347980,1,5158,CI,fix/20260617-0519,f526d43a602678a50323a4c2f2aa74adfcb2d725,pull_request,,2026-07-09T21:44:06Z,2026-07-09T22:39:37Z,success,job_log_route_metric
 29053611157,1,5160,CI,fix/20260617-0523,7a0b7fc9eee65d72e2c8ec16ebb6781b91049109,pull_request,1844,2026-07-09T22:07:58Z,2026-07-09T23:30:44Z,success,job_log_route_metric
@@ -3586,3 +3586,6 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29087348922,1,5216,CI,fix/20260709-0728,88f45db27f7a08de3136d3efe343e4432cb01e48,pull_request,1813,2026-07-10T10:45:59Z,2026-07-10T13:05:33Z,failure,job_log_failure_summary
 29087636392,1,5217,CI,fix/20260618-0531,e6823d61e2e355ce5ba813f6cc626edce992412c,pull_request,1846,2026-07-10T10:51:45Z,2026-07-10T13:13:41Z,failure,job_log_failure_summary
 29105747111,1,5218,CI,feat/bind-bugfix-evidence-to-final-head,96bbe7d5e4eb8c4c6d4342d802e2025af43c197d,pull_request,1855,2026-07-10T15:59:46Z,2026-07-10T16:21:06Z,cancelled,unavailable_job_log
+29107046886,1,5219,CI,feat/bind-bugfix-evidence-to-final-head,45ce525cf8ffc4538671f17fca0893aac6aee7a8,pull_request,1855,2026-07-10T16:20:48Z,2026-07-10T17:08:26Z,cancelled,unavailable_job_log
+29109883891,1,5220,CI,feat/bind-bugfix-evidence-to-final-head,a3a1b6bcf57947256ab0d5b095d27ada72374ee8,pull_request,1855,2026-07-10T17:07:54Z,2026-07-10T17:36:19Z,cancelled,unavailable_job_log
+29111536627,1,5221,CI,feat/bind-bugfix-evidence-to-final-head,de581ba8a73954bf2a199f9082089f7231b9c795,pull_request,1855,2026-07-10T17:35:46Z,2026-07-10T18:16:29Z,cancelled,job_log_failure_summary
