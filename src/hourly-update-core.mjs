@@ -2,8 +2,16 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  ARTIFACT_JSON_SOURCE,
+  HEADERS,
+  JOB_LOG_FAILURE_SOURCE,
+  JOB_LOG_ROUTE_METRIC_SOURCE,
+  readTable,
+} from './metrics-core.mjs';
 
 const DEFAULT_PAGE_SIZE = 100;
+const PERMANENTLY_UNAVAILABLE_SOURCE = 'unavailable_job_log';
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export function listWorkflowRunsFromCheckpoint({
@@ -51,9 +59,16 @@ export function listWorkflowRunsFromCheckpoint({
   return discovered.reverse();
 }
 
-export function planIncrementalSync({ checkpoint, runs, snapshotAt }) {
+export function planIncrementalSync({ checkpoint, runs, snapshotAt, isRunProcessed = () => true }) {
   const cursor = checkpoint.processed_through;
-  const normalizedRuns = runs.map(normalizeWorkflowRun).sort(compareRuns);
+  const snapshot = new Date(snapshotAt);
+  if (Number.isNaN(snapshot.getTime())) {
+    throw new Error(`Invalid snapshot timestamp: ${snapshotAt}`);
+  }
+  const normalizedRuns = runs
+    .map(normalizeWorkflowRun)
+    .filter((run) => new Date(run.created_at).getTime() <= snapshot.getTime())
+    .sort(compareRuns);
   const checkpointIndex = normalizedRuns.findIndex((run) => run.run_id === String(cursor.run_id));
   if (checkpointIndex < 0) {
     throw new Error(`Checkpoint run ${cursor.run_id} is missing from the incremental run window.`);
@@ -74,14 +89,19 @@ export function planIncrementalSync({ checkpoint, runs, snapshotAt }) {
       blockedBy = run;
       break;
     }
+    if (isNewerThanCheckpoint(run, cursor) && !isRunProcessed(run)) {
+      blockedBy = { ...run, block_reason: 'log data not persisted' };
+      break;
+    }
     frontier = run;
   }
 
   return {
     needsBackfill: runsToSync.length > 0,
     since: String(cursor.created_at),
-    until: new Date(snapshotAt).toISOString(),
+    until: snapshot.toISOString(),
     runIdsToSync: runsToSync.map((run) => run.run_id),
+    runKeysToSync: runsToSync.map(runKey),
     blockedBy,
     nextCheckpoint: frontier ? checkpointFromRun(checkpoint, frontier) : checkpoint,
   };
@@ -97,6 +117,7 @@ export function runHourlyUpdate({
   dryRun = false,
   listRuns = listWorkflowRunsFromCheckpoint,
   runBackfill = executeBackfill,
+  loadRunSources = readRunSources,
 }) {
   const checkpoint = readCheckpoint(checkpointPath, { repository, workflow });
   const runs = listRuns({ repository, workflow, checkpoint, retries });
@@ -106,6 +127,7 @@ export function runHourlyUpdate({
     return { ...plan, checkpointUpdated: false, dryRun: true };
   }
 
+  const sourcesBefore = plan.needsBackfill ? loadRunSources({ repoRoot }) : new Map();
   if (plan.needsBackfill) {
     runBackfill({
       repository,
@@ -114,15 +136,25 @@ export function runHourlyUpdate({
       since: plan.since,
       until: plan.until,
       retries,
+      refreshSources: collectRefreshSources(plan.runKeysToSync, sourcesBefore),
     });
   }
 
-  const checkpointUpdated = JSON.stringify(plan.nextCheckpoint) !== JSON.stringify(checkpoint);
+  const runSources = plan.needsBackfill ? loadRunSources({ repoRoot }) : new Map();
+  const persistedPlan = plan.needsBackfill
+    ? planIncrementalSync({
+        checkpoint,
+        runs,
+        snapshotAt,
+        isRunProcessed: (run) => isPersistedLogRun(runSources.get(runKey(run))),
+      })
+    : plan;
+  const checkpointUpdated = JSON.stringify(persistedPlan.nextCheckpoint) !== JSON.stringify(checkpoint);
   if (checkpointUpdated) {
-    writeCheckpoint(checkpointPath, plan.nextCheckpoint);
+    writeCheckpoint(checkpointPath, persistedPlan.nextCheckpoint);
   }
 
-  return { ...plan, checkpointUpdated, dryRun: false };
+  return { ...plan, blockedBy: persistedPlan.blockedBy, nextCheckpoint: persistedPlan.nextCheckpoint, checkpointUpdated, dryRun: false };
 }
 
 export function readCheckpoint(checkpointPath, { repository, workflow } = {}) {
@@ -191,6 +223,42 @@ function checkpointFromRun(checkpoint, run) {
   };
 }
 
+function runKey(run) {
+  return `${run.run_id}#${run.run_attempt || 1}`;
+}
+
+function isPersistedLogRun(source) {
+  return String(source ?? '')
+    .split(';')
+    .some((item) => [JOB_LOG_ROUTE_METRIC_SOURCE, PERMANENTLY_UNAVAILABLE_SOURCE].includes(item));
+}
+
+function readRunSources({ repoRoot }) {
+  const rows = readTable(path.join(repoRoot, 'data', 'runs.csv'), HEADERS.runs);
+  return new Map(rows.map((row) => [`${row.run_id}#${row.run_attempt || '1'}`, row.data_source]));
+}
+
+function collectRefreshSources(runKeys, runSources) {
+  const refreshable = new Set([ARTIFACT_JSON_SOURCE, JOB_LOG_FAILURE_SOURCE]);
+  const selected = new Set();
+  for (const key of runKeys) {
+    const sources = String(runSources.get(key) ?? '').split(';');
+    if (
+      sources.some((source) =>
+        [JOB_LOG_ROUTE_METRIC_SOURCE, PERMANENTLY_UNAVAILABLE_SOURCE].includes(source),
+      )
+    ) {
+      continue;
+    }
+    for (const source of sources) {
+      if (refreshable.has(source)) {
+        selected.add(source);
+      }
+    }
+  }
+  return [...selected].sort();
+}
+
 function validateProcessedThrough(cursor) {
   if (!cursor || !String(cursor.run_id ?? '')) {
     throw new Error('Checkpoint is missing processed_through.run_id.');
@@ -208,25 +276,36 @@ function validateProcessedThrough(cursor) {
   }
 }
 
-function executeBackfill({ repository, workflow, repoRoot, since, until, retries }) {
+function executeBackfill({ repository, workflow, repoRoot, since, until, retries, refreshSources = [] }) {
+  executeBackfillCommand({ repository, workflow, repoRoot, since, until, retries });
+  for (const refreshSource of refreshSources) {
+    executeBackfillCommand({ repository, workflow, repoRoot, since, until, retries, refreshSource });
+  }
+}
+
+function executeBackfillCommand({ repository, workflow, repoRoot, since, until, retries, refreshSource = '' }) {
+  const args = [
+    path.join(moduleDirectory, 'backfill-history.mjs'),
+    '--repo',
+    repository,
+    '--workflow',
+    workflow,
+    '--since',
+    since,
+    '--until',
+    until,
+    '--repo-root',
+    repoRoot,
+    '--retries',
+    String(retries),
+    '--quiet-skips',
+  ];
+  if (refreshSource) {
+    args.push('--refresh-source', refreshSource);
+  }
   execFileSync(
     process.execPath,
-    [
-      path.join(moduleDirectory, 'backfill-history.mjs'),
-      '--repo',
-      repository,
-      '--workflow',
-      workflow,
-      '--since',
-      since,
-      '--until',
-      until,
-      '--repo-root',
-      repoRoot,
-      '--retries',
-      String(retries),
-      '--quiet-skips',
-    ],
+    args,
     {
       cwd: repoRoot,
       env: process.env,

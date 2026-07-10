@@ -86,6 +86,25 @@ test('completed runs advance the checkpoint while keeping the query boundary inc
   assert.equal(plan.nextCheckpoint.processed_through.run_number, 102);
 });
 
+test('runs created after the captured snapshot cannot advance the checkpoint', () => {
+  const plan = planIncrementalSync({
+    checkpoint,
+    snapshotAt: '2026-07-10T12:00:00.000Z',
+    runs: [
+      workflowRun(100),
+      workflowRun(101),
+      workflowRun(102),
+      workflowRun(103, {
+        created_at: '2026-07-10T12:00:00.001Z',
+        updated_at: '2026-07-10T12:00:00.002Z',
+      }),
+    ],
+  });
+
+  assert.deepEqual(plan.runIdsToSync, ['101', '102']);
+  assert.equal(plan.nextCheckpoint.processed_through.run_id, '102');
+});
+
 test('an unfinished run blocks the checkpoint without blocking imports from later completed runs', () => {
   const plan = planIncrementalSync({
     checkpoint,
@@ -132,6 +151,7 @@ test('the persisted checkpoint advances only after the inclusive backfill succee
       snapshotAt: '2026-07-10T12:00:00.000Z',
       listRuns: () => [workflowRun(100), workflowRun(101)],
       runBackfill: (options) => backfills.push(options),
+      loadRunSources: () => new Map([['101#1', 'job_log_route_metric']]),
     });
 
     assert.equal(result.checkpointUpdated, true);
@@ -169,6 +189,65 @@ test('a failed backfill leaves the persisted checkpoint unchanged', () => {
       /temporary GitHub API failure/,
     );
     assert.equal(readFileSync(checkpointPath, 'utf8'), original);
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('a zero-exit backfill cannot advance past a run without persisted log data', () => {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-unprocessed-'));
+  const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
+  mkdirSync(path.dirname(checkpointPath), { recursive: true });
+  writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+
+  try {
+    const result = runHourlyUpdate({
+      repository: checkpoint.repository,
+      workflow: checkpoint.workflow,
+      repoRoot,
+      checkpointPath,
+      snapshotAt: '2026-07-10T12:00:00.000Z',
+      listRuns: () => [workflowRun(100), workflowRun(101)],
+      runBackfill: () => {},
+      loadRunSources: () => new Map([['101#1', 'inspected_ci']]),
+    });
+
+    assert.equal(result.checkpointUpdated, false);
+    assert.equal(result.blockedBy.run_id, '101');
+    assert.deepEqual(JSON.parse(readFileSync(checkpointPath, 'utf8')), checkpoint);
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('artifact-only runs are explicitly retried for log data before the checkpoint advances', () => {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-artifact-'));
+  const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
+  mkdirSync(path.dirname(checkpointPath), { recursive: true });
+  writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  const sourceSnapshots = [
+    new Map([['101#1', 'artifact_json']]),
+    new Map([['101#1', 'job_log_route_metric']]),
+  ];
+  let backfillOptions;
+
+  try {
+    const result = runHourlyUpdate({
+      repository: checkpoint.repository,
+      workflow: checkpoint.workflow,
+      repoRoot,
+      checkpointPath,
+      snapshotAt: '2026-07-10T12:00:00.000Z',
+      listRuns: () => [workflowRun(100), workflowRun(101)],
+      loadRunSources: () => sourceSnapshots.shift(),
+      runBackfill: (options) => {
+        backfillOptions = options;
+      },
+    });
+
+    assert.deepEqual(backfillOptions.refreshSources, ['artifact_json']);
+    assert.equal(result.checkpointUpdated, true);
+    assert.equal(result.nextCheckpoint.processed_through.run_id, '101');
   } finally {
     rmSync(repoRoot, { recursive: true, force: true });
   }

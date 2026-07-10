@@ -31,9 +31,10 @@ try {
   }
 
   if (result.blockedBy) {
-    console.log(
-      `Checkpoint remains before run #${result.blockedBy.run_number} (${result.blockedBy.status}) until that run completes.`,
-    );
+    const reason = result.blockedBy.block_reason
+      ? result.blockedBy.block_reason
+      : `${result.blockedBy.status}; waiting for completion`;
+    console.log(`Checkpoint remains before run #${result.blockedBy.run_number}: ${reason}.`);
   } else if (result.checkpointUpdated) {
     const cursor = result.nextCheckpoint.processed_through;
     console.log(`Checkpoint advanced to run #${cursor.run_number} (${cursor.run_id}, attempt ${cursor.run_attempt}).`);
