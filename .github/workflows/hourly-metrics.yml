@@ -1,0 +1,102 @@
+name: Update E2E metrics hourly
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: e2e-ci-metrics-writer
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout metrics repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Update completed AoE Desktop CI runs
+        env:
+          GH_TOKEN: ${{ secrets.AOE_DESKTOP_READ_TOKEN }}
+        run: >-
+          pnpm exec node src/update-hourly.mjs
+          --repo AOE-HQ/aoe-desktop
+          --workflow ci.yml
+          --checkpoint state/aoe-desktop-ci-checkpoint.json
+          --retries 3
+
+      - name: Verify metrics and checkpoint behavior
+        run: >-
+          pnpm exec node --test
+          tests/hourly-update.test.mjs
+          tests/metrics-core.test.mjs
+          tests/pr-number-preservation.test.mjs
+          tests/route-failure-history.test.mjs
+
+      - name: Build dashboard
+        run: pnpm build:pages
+
+      - name: Commit and push updated metrics
+        id: commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            data/routes.csv \
+            data/runs.csv \
+            data/route_results.csv \
+            data/route_stats.csv \
+            data/route_platform_stats.csv \
+            state/aoe-desktop-ci-checkpoint.json
+
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "data: hourly e2e metrics update [skip ci]"
+
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to push metrics after $attempt attempts." >&2
+              exit 1
+            fi
+
+            git fetch origin main
+            git rebase origin/main
+          done
+
+      - name: Deploy the updated dashboard
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
