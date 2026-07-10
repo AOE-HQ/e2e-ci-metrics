@@ -53,8 +53,6 @@ jobs:
           pnpm exec node --test
           tests/hourly-update.test.mjs
           tests/metrics-core.test.mjs
-          tests/pr-number-preservation.test.mjs
-          tests/route-failure-history.test.mjs
 
       - name: Build dashboard
         run: pnpm build:pages

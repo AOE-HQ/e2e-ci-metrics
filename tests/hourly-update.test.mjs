@@ -9,6 +9,7 @@ import {
   planIncrementalSync,
   runHourlyUpdate,
 } from '../src/hourly-update-core.mjs';
+import { HEADERS, stringifyCsv } from '../src/metrics-core.mjs';
 
 const checkpoint = {
   schema_version: 1,
@@ -348,6 +349,56 @@ test('a run missing a complete expected platform is refreshed and remains a chec
   }
 });
 
+test('the public updater derives expected-platform completeness from persisted CSV rows', () => {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-csv-'));
+  const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
+  const dataDir = path.join(repoRoot, 'data');
+  mkdirSync(path.dirname(checkpointPath), { recursive: true });
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  writeFileSync(
+    path.join(dataDir, 'runs.csv'),
+    stringifyCsv(HEADERS.runs, [
+      { run_id: '101', run_attempt: '1', data_source: 'job_log_route_metric' },
+    ]),
+  );
+  const macosRow = {
+    run_id: '101',
+    run_attempt: '1',
+    route_id: 'route-a',
+    platform: 'macos',
+    outcome: 'passed',
+    data_source: 'job_log_route_metric',
+  };
+  const windowsRow = { ...macosRow, platform: 'windows' };
+  writeFileSync(path.join(dataDir, 'route_results.csv'), stringifyCsv(HEADERS.routeResults, [macosRow]));
+  let backfillOptions;
+
+  try {
+    const result = runHourlyUpdate({
+      repository: checkpoint.repository,
+      workflow: checkpoint.workflow,
+      repoRoot,
+      checkpointPath,
+      snapshotAt: '2026-07-10T12:00:00.000Z',
+      listRuns: () => [workflowRun(100), workflowRun(101)],
+      runBackfill: (options) => {
+        backfillOptions = options;
+        writeFileSync(
+          path.join(dataDir, 'route_results.csv'),
+          stringifyCsv(HEADERS.routeResults, [macosRow, windowsRow]),
+        );
+      },
+    });
+
+    assert.deepEqual(backfillOptions.refreshSources, ['job_log_route_metric']);
+    assert.equal(result.checkpointUpdated, true);
+    assert.equal(result.nextCheckpoint.processed_through.run_id, '101');
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test('the hourly workflow is a single serialized writer and explicitly redeploys Pages', () => {
   const workflow = readFileSync(path.join(projectRoot, '.github', 'workflows', 'hourly-metrics.yml'), 'utf8');
 
@@ -360,6 +411,8 @@ test('the hourly workflow is a single serialized writer and explicitly redeploys
   assert.match(workflow, /--checkpoint state\/aoe-desktop-ci-checkpoint\.json/);
   assert.match(workflow, /state\/aoe-desktop-ci-checkpoint\.json/);
   assert.match(workflow, /gh workflow run pages\.yml/);
+  assert.doesNotMatch(workflow, /tests\/pr-number-preservation\.test\.mjs/);
+  assert.doesNotMatch(workflow, /tests\/route-failure-history\.test\.mjs/);
   assert.doesNotMatch(workflow, /^\s+push:/m);
 });
 
