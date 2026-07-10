@@ -14,6 +14,7 @@ const checkpoint = {
   schema_version: 1,
   repository: 'AOE-HQ/aoe-desktop',
   workflow: 'ci.yml',
+  expected_platforms: ['macos', 'windows'],
   processed_through: {
     run_id: '100',
     run_number: 100,
@@ -248,6 +249,100 @@ test('artifact-only runs are explicitly retried for log data before the checkpoi
     assert.deepEqual(backfillOptions.refreshSources, ['artifact_json']);
     assert.equal(result.checkpointUpdated, true);
     assert.equal(result.nextCheckpoint.processed_through.run_id, '101');
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('mixed complete and partial log sources retry the partial source before advancing', () => {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-partial-'));
+  const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
+  mkdirSync(path.dirname(checkpointPath), { recursive: true });
+  writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  const sourceSnapshots = [
+    new Map([['101#1', 'job_log_failure_summary;job_log_route_metric']]),
+    new Map([['101#1', 'job_log_route_metric']]),
+  ];
+  let backfillOptions;
+
+  try {
+    const result = runHourlyUpdate({
+      repository: checkpoint.repository,
+      workflow: checkpoint.workflow,
+      repoRoot,
+      checkpointPath,
+      snapshotAt: '2026-07-10T12:00:00.000Z',
+      listRuns: () => [workflowRun(100), workflowRun(101)],
+      loadRunSources: () => sourceSnapshots.shift(),
+      runBackfill: (options) => {
+        backfillOptions = options;
+      },
+    });
+
+    assert.deepEqual(backfillOptions.refreshSources, ['job_log_failure_summary']);
+    assert.equal(result.checkpointUpdated, true);
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('unavailable log markers are retried and cannot advance the checkpoint by themselves', () => {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-unavailable-'));
+  const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
+  mkdirSync(path.dirname(checkpointPath), { recursive: true });
+  writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  let backfillOptions;
+
+  try {
+    const result = runHourlyUpdate({
+      repository: checkpoint.repository,
+      workflow: checkpoint.workflow,
+      repoRoot,
+      checkpointPath,
+      snapshotAt: '2026-07-10T12:00:00.000Z',
+      listRuns: () => [workflowRun(100), workflowRun(101)],
+      loadRunSources: () => new Map([['101#1', 'unavailable_job_log']]),
+      runBackfill: (options) => {
+        backfillOptions = options;
+      },
+    });
+
+    assert.deepEqual(backfillOptions.refreshSources, ['unavailable_job_log']);
+    assert.equal(result.checkpointUpdated, false);
+    assert.equal(result.blockedBy.run_id, '101');
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('a run missing a complete expected platform is refreshed and remains a checkpoint barrier', () => {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-platform-'));
+  const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
+  mkdirSync(path.dirname(checkpointPath), { recursive: true });
+  writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  const incompleteState = {
+    source: 'job_log_route_metric',
+    complete_platforms: ['macos'],
+  };
+  let backfillOptions;
+
+  try {
+    const result = runHourlyUpdate({
+      repository: checkpoint.repository,
+      workflow: checkpoint.workflow,
+      repoRoot,
+      checkpointPath,
+      snapshotAt: '2026-07-10T12:00:00.000Z',
+      listRuns: () => [workflowRun(100), workflowRun(101)],
+      loadRunSources: () => new Map([['101#1', incompleteState]]),
+      runBackfill: (options) => {
+        backfillOptions = options;
+      },
+    });
+
+    assert.deepEqual(backfillOptions.refreshSources, ['job_log_route_metric']);
+    assert.equal(result.checkpointUpdated, false);
+    assert.equal(result.blockedBy.run_id, '101');
   } finally {
     rmSync(repoRoot, { recursive: true, force: true });
   }

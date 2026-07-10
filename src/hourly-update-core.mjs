@@ -11,7 +11,7 @@ import {
 } from './metrics-core.mjs';
 
 const DEFAULT_PAGE_SIZE = 100;
-const PERMANENTLY_UNAVAILABLE_SOURCE = 'unavailable_job_log';
+const UNAVAILABLE_JOB_LOG_SOURCE = 'unavailable_job_log';
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export function listWorkflowRunsFromCheckpoint({
@@ -136,7 +136,11 @@ export function runHourlyUpdate({
       since: plan.since,
       until: plan.until,
       retries,
-      refreshSources: collectRefreshSources(plan.runKeysToSync, sourcesBefore),
+      refreshSources: collectRefreshSources(
+        plan.runKeysToSync,
+        sourcesBefore,
+        checkpoint.expected_platforms,
+      ),
     });
   }
 
@@ -146,7 +150,8 @@ export function runHourlyUpdate({
         checkpoint,
         runs,
         snapshotAt,
-        isRunProcessed: (run) => isPersistedLogRun(runSources.get(runKey(run))),
+        isRunProcessed: (run) =>
+          isPersistedLogRun(runSources.get(runKey(run)), checkpoint.expected_platforms),
       })
     : plan;
   const checkpointUpdated = JSON.stringify(persistedPlan.nextCheckpoint) !== JSON.stringify(checkpoint);
@@ -167,6 +172,9 @@ export function readCheckpoint(checkpointPath, { repository, workflow } = {}) {
   }
   if (workflow && checkpoint.workflow !== workflow) {
     throw new Error(`Checkpoint workflow ${checkpoint.workflow} does not match ${workflow}.`);
+  }
+  if (!Array.isArray(checkpoint.expected_platforms) || checkpoint.expected_platforms.length === 0) {
+    throw new Error('Checkpoint expected_platforms must contain at least one platform.');
   }
   validateProcessedThrough(checkpoint.processed_through);
   return checkpoint;
@@ -210,9 +218,7 @@ function isNewerThanCheckpoint(run, cursor) {
 
 function checkpointFromRun(checkpoint, run) {
   return {
-    schema_version: 1,
-    repository: checkpoint.repository,
-    workflow: checkpoint.workflow,
+    ...checkpoint,
     processed_through: {
       run_id: run.run_id,
       run_number: run.run_number,
@@ -227,28 +233,64 @@ function runKey(run) {
   return `${run.run_id}#${run.run_attempt || 1}`;
 }
 
-function isPersistedLogRun(source) {
-  return String(source ?? '')
-    .split(';')
-    .some((item) => [JOB_LOG_ROUTE_METRIC_SOURCE, PERMANENTLY_UNAVAILABLE_SOURCE].includes(item));
+function isPersistedLogRun(value, expectedPlatforms) {
+  const state = normalizeRunSourceState(value);
+  const sources = new Set(state.source.split(';').filter(Boolean));
+  if (sources.size !== 1 || !sources.has(JOB_LOG_ROUTE_METRIC_SOURCE)) {
+    return false;
+  }
+  if (state.completePlatforms === null) {
+    return true;
+  }
+  return expectedPlatforms.every((platform) => state.completePlatforms.has(platform));
 }
 
 function readRunSources({ repoRoot }) {
-  const rows = readTable(path.join(repoRoot, 'data', 'runs.csv'), HEADERS.runs);
-  return new Map(rows.map((row) => [`${row.run_id}#${row.run_attempt || '1'}`, row.data_source]));
+  const runs = readTable(path.join(repoRoot, 'data', 'runs.csv'), HEADERS.runs);
+  const routeResults = readTable(path.join(repoRoot, 'data', 'route_results.csv'), HEADERS.routeResults);
+  const platformSourcesByRun = new Map();
+
+  for (const row of routeResults) {
+    const key = `${row.run_id}#${row.run_attempt || '1'}`;
+    if (!platformSourcesByRun.has(key)) {
+      platformSourcesByRun.set(key, new Map());
+    }
+    const byPlatform = platformSourcesByRun.get(key);
+    if (!byPlatform.has(row.platform)) {
+      byPlatform.set(row.platform, new Set());
+    }
+    byPlatform.get(row.platform).add(row.data_source);
+  }
+
+  return new Map(
+    runs.map((row) => {
+      const key = `${row.run_id}#${row.run_attempt || '1'}`;
+      const byPlatform = platformSourcesByRun.get(key) ?? new Map();
+      const completePlatforms = [...byPlatform.entries()]
+        .filter(([, sources]) => sources.size === 1 && sources.has(JOB_LOG_ROUTE_METRIC_SOURCE))
+        .map(([platform]) => platform);
+      return [key, { source: row.data_source, complete_platforms: completePlatforms }];
+    }),
+  );
 }
 
-function collectRefreshSources(runKeys, runSources) {
-  const refreshable = new Set([ARTIFACT_JSON_SOURCE, JOB_LOG_FAILURE_SOURCE]);
+function collectRefreshSources(runKeys, runSources, expectedPlatforms) {
+  const refreshable = new Set([
+    ARTIFACT_JSON_SOURCE,
+    JOB_LOG_FAILURE_SOURCE,
+    UNAVAILABLE_JOB_LOG_SOURCE,
+  ]);
   const selected = new Set();
   for (const key of runKeys) {
-    const sources = String(runSources.get(key) ?? '').split(';');
+    const state = normalizeRunSourceState(runSources.get(key));
+    const sources = state.source.split(';');
     if (
-      sources.some((source) =>
-        [JOB_LOG_ROUTE_METRIC_SOURCE, PERMANENTLY_UNAVAILABLE_SOURCE].includes(source),
-      )
+      sources.length === 1 &&
+      sources[0] === JOB_LOG_ROUTE_METRIC_SOURCE &&
+      state.completePlatforms !== null &&
+      expectedPlatforms.some((platform) => !state.completePlatforms.has(platform))
     ) {
-      continue;
+      selected.add(JOB_LOG_ROUTE_METRIC_SOURCE);
     }
     for (const source of sources) {
       if (refreshable.has(source)) {
@@ -257,6 +299,19 @@ function collectRefreshSources(runKeys, runSources) {
     }
   }
   return [...selected].sort();
+}
+
+function normalizeRunSourceState(value) {
+  if (value && typeof value === 'object') {
+    return {
+      source: String(value.source ?? ''),
+      completePlatforms: new Set(value.complete_platforms ?? []),
+    };
+  }
+  return {
+    source: String(value ?? ''),
+    completePlatforms: null,
+  };
 }
 
 function validateProcessedThrough(cursor) {
