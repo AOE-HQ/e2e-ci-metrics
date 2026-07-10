@@ -37,10 +37,15 @@ describe('backfill history policy', () => {
     );
   });
 
-  it('retries temporarily unavailable observations on later daily summaries', () => {
+  it('retries only observations that can still improve on later daily summaries', () => {
     assert.equal(isTerminalSource('artifact_json'), true);
     assert.equal(isTerminalSource('job_log_failure_summary'), false);
+    assert.equal(
+      isTerminalSource('job_log_failure_summary', { isLatestAttempt: false }),
+      true,
+    );
     assert.equal(isTerminalSource('unavailable_job_log'), false);
+    assert.equal(isTerminalSource('unavailable_job_log', { isLatestAttempt: false }), false);
     assert.equal(isTerminalSource('inspected_ci'), false);
   });
 
@@ -50,5 +55,9 @@ describe('backfill history policy', () => {
     assert.doesNotMatch(source, /repos\/\$\{repo\}\/actions\/artifacts/);
     assert.match(source, /actions\/runs\/\$\{runId\}\/artifacts/);
     assert.match(source, /actions\/runs\/\$\{runId\}\/attempts\/\$\{attempt\}\/jobs/);
+    assert.match(
+      source,
+      /isTerminalSource\(\s*runSources\.get\(runKey\),\s*\{ isLatestAttempt: run\.isLatestAttempt \}\s*\)/s,
+    );
   });
 });

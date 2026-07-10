@@ -56,7 +56,10 @@ const summary = {
 for (const run of runs) {
   summary.inspected += 1;
   const runKey = getRunKey(run);
-  if (!refresh && isTerminalSource(runSources.get(runKey))) {
+  if (
+    !refresh &&
+    isTerminalSource(runSources.get(runKey), { isLatestAttempt: run.isLatestAttempt })
+  ) {
     summary.skippedExisting += 1;
     continue;
   }

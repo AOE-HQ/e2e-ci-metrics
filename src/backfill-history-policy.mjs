@@ -1,6 +1,7 @@
 // ABOUTME: 定义每日 E2E 历史回看的 attempt 展开与终态判定策略。
 
-const TERMINAL_SOURCES = new Set(['artifact_json']);
+const ALWAYS_TERMINAL_SOURCES = new Set(['artifact_json']);
+const PRIOR_ATTEMPT_TERMINAL_SOURCES = new Set(['job_log_failure_summary']);
 
 export function expandWorkflowRunAttempts(latestRuns, loadPriorAttempt) {
   const expanded = [];
@@ -20,8 +21,12 @@ export function expandWorkflowRunAttempts(latestRuns, loadPriorAttempt) {
   return expanded;
 }
 
-export function isTerminalSource(source) {
+export function isTerminalSource(source, { isLatestAttempt = true } = {}) {
   return String(source ?? '')
     .split(';')
-    .some((item) => TERMINAL_SOURCES.has(item));
+    .some(
+      (item) =>
+        ALWAYS_TERMINAL_SOURCES.has(item) ||
+        (!isLatestAttempt && PRIOR_ATTEMPT_TERMINAL_SOURCES.has(item)),
+    );
 }
