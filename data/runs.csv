@@ -3589,3 +3589,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29107046886,1,5219,CI,feat/bind-bugfix-evidence-to-final-head,45ce525cf8ffc4538671f17fca0893aac6aee7a8,pull_request,1855,2026-07-10T16:20:48Z,2026-07-10T17:08:26Z,cancelled,unavailable_job_log
 29109883891,1,5220,CI,feat/bind-bugfix-evidence-to-final-head,a3a1b6bcf57947256ab0d5b095d27ada72374ee8,pull_request,1855,2026-07-10T17:07:54Z,2026-07-10T17:36:19Z,cancelled,unavailable_job_log
 29111536627,1,5221,CI,feat/bind-bugfix-evidence-to-final-head,de581ba8a73954bf2a199f9082089f7231b9c795,pull_request,1855,2026-07-10T17:35:46Z,2026-07-10T18:16:29Z,cancelled,job_log_failure_summary
+29115773450,1,5223,CI,fix/ci-common-rrule-future-occurrence,3ba861ec8eac05b46cbf1819fd1e22c8d76798a2,pull_request,1856,2026-07-10T18:47:02Z,2026-07-10T19:17:16Z,cancelled,job_log_route_metric
+29113931359,1,5222,CI,feat/bind-bugfix-evidence-to-final-head,6d669bec4c3ed8f495d8d09cbf6c0d888b650ad4,pull_request,1855,2026-07-10T18:16:05Z,2026-07-10T19:30:06Z,failure,job_log_failure_summary
+29117453324,1,5224,CI,fix/ci-common-rrule-future-occurrence,fe67ff5410aad51d3a0948c1d67271a7295876b3,pull_request,1856,2026-07-10T19:16:49Z,2026-07-10T20:17:56Z,cancelled,job_log_failure_summary;job_log_route_metric
+29120899081,1,5225,CI,fix/ci-common-rrule-future-occurrence,29a850fe65e2e41ac71e24c2b9488dc6c13ff07c,pull_request,1856,2026-07-10T20:17:31Z,2026-07-10T20:20:41Z,cancelled,unavailable_job_log
