@@ -58,7 +58,11 @@ this repository after each run.
 three-day window of completed `AOE-HQ/aoe-desktop` `ci.yml` runs, imports run
 attempts idempotently, and creates at most one data commit when the aggregate
 changed. The overlap tolerates one or more delayed schedules without duplicating
-rows.
+rows. The job only runs from the repository `main` ref, explicitly checks out
+`main`, and pushes `HEAD:main`; manual dispatches from other refs are skipped.
+The importer enumerates every available rerun attempt and queries artifacts per
+recent run instead of scanning repository-wide artifact history. A temporary
+`unavailable_job_log` observation remains retryable on the next overlapping run.
 
 Configure `AOE_DESKTOP_READ_TOKEN` as a repository Actions secret. Use a
 fine-grained token restricted to `AOE-HQ/aoe-desktop` with Actions read access
