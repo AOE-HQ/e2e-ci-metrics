@@ -1,6 +1,6 @@
 // ABOUTME: 定义每日 E2E 历史回看的 attempt 展开与终态判定策略。
 
-const TERMINAL_SOURCES = new Set(['artifact_json', 'job_log_failure_summary']);
+const TERMINAL_SOURCES = new Set(['artifact_json']);
 
 export function expandWorkflowRunAttempts(latestRuns, loadPriorAttempt) {
   const expanded = [];

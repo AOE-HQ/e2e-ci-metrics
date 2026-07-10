@@ -39,7 +39,7 @@ describe('backfill history policy', () => {
 
   it('retries temporarily unavailable observations on later daily summaries', () => {
     assert.equal(isTerminalSource('artifact_json'), true);
-    assert.equal(isTerminalSource('job_log_failure_summary'), true);
+    assert.equal(isTerminalSource('job_log_failure_summary'), false);
     assert.equal(isTerminalSource('unavailable_job_log'), false);
     assert.equal(isTerminalSource('inspected_ci'), false);
   });

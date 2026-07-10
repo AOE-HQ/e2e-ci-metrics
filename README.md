@@ -61,8 +61,10 @@ changed. The overlap tolerates one or more delayed schedules without duplicating
 rows. The job only runs from the repository `main` ref, explicitly checks out
 `main`, and pushes `HEAD:main`; manual dispatches from other refs are skipped.
 The importer enumerates every available rerun attempt and queries artifacts per
-recent run instead of scanning repository-wide artifact history. A temporary
-`unavailable_job_log` observation remains retryable on the next overlapping run.
+recent run instead of scanning repository-wide artifact history. Both temporary
+`unavailable_job_log` observations and log-only `job_log_failure_summary`
+fallbacks remain retryable on the next overlapping run, so a later JSON artifact
+can replace the partial fallback with the complete route results.
 
 Configure `AOE_DESKTOP_READ_TOKEN` as a repository Actions secret. Use a
 fine-grained token restricted to `AOE-HQ/aoe-desktop` with Actions read access
@@ -121,6 +123,6 @@ the full `route_results.csv`. It does not delete other historical runs.
 
 Backfill automatically splits large created-date ranges before listing workflow
 runs because GitHub caps a single Actions run search window at 1000 results.
-It also pre-filters repository artifacts and only downloads runs that still have
-`e2e-report-*` artifacts. Runs without artifacts are still inspected for
-log-recoverable E2E failures.
+For each recent run and rerun attempt, it queries that run's `e2e-report-*`
+artifacts directly. Attempts without usable artifacts are still inspected for
+log-recoverable E2E failures and retried by later overlapping daily summaries.
