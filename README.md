@@ -48,34 +48,47 @@ An E2E route id is:
 
 The route id must never use execution order, test index, or line number.
 
-## Current Run Update
+## Daily Summary Update
 
 AoE Desktop CI uploads Playwright JSON artifacts named `e2e-report-macos` and
-`e2e-report-windows`. The CI metrics job checks out this repository and runs:
+`e2e-report-windows` with 30-day retention. Product CI does not clone or write
+this repository after each run.
+
+`.github/workflows/daily-summary.yml` runs once per UTC day, scans an overlapping
+three-day window of completed `AOE-HQ/aoe-desktop` `ci.yml` runs, imports run
+attempts idempotently, and creates at most one data commit when the aggregate
+changed. The overlap tolerates one or more delayed schedules without duplicating
+rows. The job only runs from the repository `main` ref, explicitly checks out
+`main`, and pushes `HEAD:main`; manual dispatches from other refs are skipped.
+The importer enumerates every available rerun attempt and queries artifacts per
+recent run instead of scanning repository-wide artifact history. Temporary
+`unavailable_job_log` observations remain retryable. A log-only
+`job_log_failure_summary` for the latest attempt also remains retryable, so a
+later JSON artifact can replace the partial fallback with complete route results;
+after a rerun makes it a prior attempt, the log result becomes terminal because
+GitHub exposes artifacts per run rather than per attempt.
+
+Configure `AOE_DESKTOP_READ_TOKEN` as a repository Actions secret. Use a
+fine-grained token restricted to `AOE-HQ/aoe-desktop` with Actions read access
+and repository contents/metadata read access. The scheduled workflow uses the
+metrics repository `GITHUB_TOKEN` only for its own `main` push.
+
+For recovery, manually dispatch `Daily E2E Metrics Summary` and provide an ISO
+date or timestamp in the `since` input. The workflow executes the equivalent of:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm update-current-run -- \
-  --reports-dir ../metrics-input \
-  --run-id "$GITHUB_RUN_ID" \
-  --run-attempt "$GITHUB_RUN_ATTEMPT" \
-  --run-number "$GITHUB_RUN_NUMBER" \
-  --workflow "$GITHUB_WORKFLOW" \
-  --branch "$GITHUB_REF_NAME" \
-  --sha "$GITHUB_SHA" \
-  --event "$GITHUB_EVENT_NAME" \
-  --pr-number "$PR_NUMBER" \
-  --started-at "$RUN_STARTED_AT" \
-  --completed-at "$RUN_COMPLETED_AT" \
-  --conclusion "$TEST_CONCLUSION" \
-  --artifact-url "$RUN_URL" \
-  --commit \
-  --push \
-  --push-retries 3
+pnpm test
+pnpm backfill -- \
+  --repo AOE-HQ/aoe-desktop \
+  --workflow ci.yml \
+  --since 2026-07-07 \
+  --retries 3 \
+  --quiet-skips
 ```
 
-Metrics update failures are observability failures. AoE Desktop CI retries them
-but does not let them block product CI.
+Daily summary failures are visible in this repository and can be manually
+retried, but they have no dependency edge back to AoE Desktop product CI.
 
 ## Module Tags
 
@@ -102,7 +115,9 @@ backfill manually from this repository:
 pnpm backfill -- --repo AOE-HQ/aoe-desktop --workflow ci.yml --since 2026-01-01
 ```
 
-Normal AoE Desktop CI updates only the current run.
+Normal AoE Desktop CI only uploads the current run artifacts. The daily summary
+uses this backfill command with a bounded recent window; wider historical scans
+remain manual.
 
 The updater is idempotent by `run_id` and `run_attempt`: rerunning the same CI
 attempt replaces that attempt's rows, then recomputes aggregate CSV files from
@@ -110,6 +125,7 @@ the full `route_results.csv`. It does not delete other historical runs.
 
 Backfill automatically splits large created-date ranges before listing workflow
 runs because GitHub caps a single Actions run search window at 1000 results.
-It also pre-filters repository artifacts and only downloads runs that still have
-`e2e-report-*` artifacts. Runs without artifacts are still inspected for
-log-recoverable E2E failures.
+For each recent run and rerun attempt, it queries that run's `e2e-report-*`
+artifacts directly. Attempts without usable artifacts are still inspected for
+log-recoverable E2E failures. Temporary log failures and the latest attempt's
+log-only fallback are retried by later overlapping daily summaries.

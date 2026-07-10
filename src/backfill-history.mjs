@@ -12,6 +12,7 @@ import {
   updateMetrics,
   writeTable,
 } from './metrics-core.mjs';
+import { expandWorkflowRunAttempts, isTerminalSource } from './backfill-history-policy.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const repo = required(args, 'repo');
@@ -24,10 +25,19 @@ const retries = Number(args.retries ?? 3);
 const quietSkips = Boolean(args['quiet-skips']);
 const refresh = Boolean(args.refresh);
 
-const runs = listRuns({ repo, workflow, since, until, limit });
-const e2eArtifactRunIds = listE2eArtifactRunIds({ repo, since, until });
-console.log(`Found ${runs.length} historical workflow runs to inspect.`);
-console.log(`Found ${e2eArtifactRunIds.size} workflow runs with E2E JSON artifacts.`);
+const latestRuns = listRuns({ repo, workflow, since, until, limit });
+const runs = expandWorkflowRunAttempts(latestRuns, ({ run, attempt }) => {
+  try {
+    return getWorkflowRunAttempt({ repo, runId: run.databaseId, attempt });
+  } catch (error) {
+    if (!isGhPermanentUnavailable(error)) {
+      throw error;
+    }
+    console.warn(`Run ${run.databaseId} attempt ${attempt}: metadata is unavailable; skipping that attempt.`);
+    return null;
+  }
+});
+console.log(`Found ${latestRuns.length} historical workflow runs with ${runs.length} attempt(s) to inspect.`);
 const runSources = seedInspectedRuns({ repoRoot, runs, workflow });
 
 const summary = {
@@ -46,7 +56,10 @@ const summary = {
 for (const run of runs) {
   summary.inspected += 1;
   const runKey = getRunKey(run);
-  if (!refresh && isTerminalSource(runSources.get(runKey))) {
+  if (
+    !refresh &&
+    isTerminalSource(runSources.get(runKey), { isLatestAttempt: run.isLatestAttempt })
+  ) {
     summary.skippedExisting += 1;
     continue;
   }
@@ -54,10 +67,28 @@ for (const run of runs) {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), `e2e-ci-metrics-${run.databaseId}-`));
   try {
     let imported = false;
+    let hasE2eArtifacts = false;
 
-    if (e2eArtifactRunIds.has(String(run.databaseId))) {
+    if (run.isLatestAttempt) {
       try {
-        downloadArtifacts({ repo, runId: run.databaseId, outputDir: tempDir, retries });
+        hasE2eArtifacts = hasE2eReportArtifactsForRun({
+          repo,
+          runId: run.databaseId,
+        });
+      } catch (error) {
+        summary.artifactFailures += 1;
+        console.warn(`Run ${run.databaseId}: artifact discovery failed; trying job logs. ${error.message}`);
+      }
+    }
+
+    if (hasE2eArtifacts) {
+      try {
+        downloadArtifacts({
+          repo,
+          runId: run.databaseId,
+          outputDir: tempDir,
+          retries,
+        });
         const reports = discoverReports(tempDir);
         if (reports.length === 0) {
           summary.skippedNoReport += 1;
@@ -81,7 +112,9 @@ for (const run of runs) {
       }
     } else {
       summary.skippedNoArtifact += 1;
-      logSkip(`Run ${run.databaseId}: no E2E JSON artifacts found; trying job logs.`);
+      logSkip(
+        `Run ${run.databaseId} attempt ${run.attempt}: no attempt-specific E2E JSON artifacts found; trying job logs.`,
+      );
     }
 
     if (imported) {
@@ -92,7 +125,12 @@ for (const run of runs) {
     if (logResults.length === 0) {
       summary.skippedNoSignal += 1;
       if (isFailureLikeRun(run)) {
-        markRunSource({ repoRoot, run, workflow, dataSource: 'unavailable_job_log' });
+        markRunSource({
+          repoRoot,
+          run,
+          workflow,
+          dataSource: 'unavailable_job_log',
+        });
         runSources.set(runKey, 'unavailable_job_log');
       }
       logSkip(`Run ${run.databaseId}: no E2E failure summary found in job logs; skipped.`);
@@ -113,7 +151,12 @@ for (const run of runs) {
   } catch (error) {
     summary.logFailures += 1;
     if (isFailureLikeRun(run) && isGhPermanentUnavailable(error)) {
-      markRunSource({ repoRoot, run, workflow, dataSource: 'unavailable_job_log' });
+      markRunSource({
+        repoRoot,
+        run,
+        workflow,
+        dataSource: 'unavailable_job_log',
+      });
       runSources.set(runKey, 'unavailable_job_log');
     }
     console.warn(`Run ${run.databaseId}: log import failed; skipped. ${error.message}`);
@@ -169,7 +212,9 @@ function markRunSource({ repoRoot, run, workflow, dataSource }) {
   const runsPath = path.join(repoRoot, 'data', 'runs.csv');
   const existing = readTable(runsPath, HEADERS.runs);
   const row = buildRunRow(run, workflow, dataSource);
-  const byKey = new Map(existing.map((candidate) => [`${candidate.run_id}#${candidate.run_attempt || '1'}`, candidate]));
+  const byKey = new Map(
+    existing.map((candidate) => [`${candidate.run_id}#${candidate.run_attempt || '1'}`, candidate]),
+  );
   byKey.set(`${row.run_id}#${row.run_attempt}`, row);
   writeTable(
     runsPath,
@@ -182,10 +227,6 @@ function getRunKey(run) {
   return `${run.databaseId}#${run.attempt ?? 1}`;
 }
 
-function isTerminalSource(source) {
-  return ['artifact_json', JOB_LOG_FAILURE_SOURCE, 'unavailable_job_log'].includes(String(source ?? ''));
-}
-
 function isFailureLikeRun(run) {
   return ['failure', 'timed_out', 'cancelled'].includes(String(run.conclusion ?? '').toLowerCase());
 }
@@ -195,7 +236,11 @@ function collectLogResults({ repo, run, retries }) {
     return [];
   }
 
-  const jobs = listE2eTestJobs({ repo, runId: run.databaseId });
+  const jobs = listE2eTestJobs({
+    repo,
+    runId: run.databaseId,
+    attempt: run.attempt,
+  });
   const results = [];
   for (const job of jobs) {
     const conclusion = String(job.conclusion ?? '').toLowerCase();
@@ -221,15 +266,14 @@ function collectLogResults({ repo, run, retries }) {
   return results;
 }
 
-function listE2eTestJobs({ repo, runId }) {
+function listE2eTestJobs({ repo, runId, attempt }) {
   const jobs = [];
   let page = 1;
 
   while (true) {
     const response = ghApiJson(
-      `repos/${repo}/actions/runs/${runId}/jobs`,
+      `repos/${repo}/actions/runs/${runId}/attempts/${attempt}/jobs`,
       {
-        filter: 'latest',
         per_page: '100',
         page: String(page),
       },
@@ -297,13 +341,25 @@ function listRuns({ repo, workflow, since, until, limit }) {
   const workflowId = resolveWorkflowId({ repo, workflow });
   const ranges = Number.isFinite(limit)
     ? [{ start: normalizeStart(since), end: normalizeEnd(until) }]
-    : splitCreatedRanges({ repo, workflowId, start: normalizeStart(since), end: normalizeEnd(until) });
+    : splitCreatedRanges({
+        repo,
+        workflowId,
+        start: normalizeStart(since),
+        end: normalizeEnd(until),
+      });
   const runsById = new Map();
 
-  console.log(`Backfill query: repo:${repo} workflow:${workflow} created:${formatRange({ start: normalizeStart(since), end: normalizeEnd(until) })}`);
+  console.log(
+    `Backfill query: repo:${repo} workflow:${workflow} created:${formatRange({ start: normalizeStart(since), end: normalizeEnd(until) })}`,
+  );
   console.log(`Backfill range slices: ${ranges.length}`);
   for (const range of ranges) {
-    const pageRuns = listRunsInRange({ repo, workflowId, range, remaining: limit - runsById.size });
+    const pageRuns = listRunsInRange({
+      repo,
+      workflowId,
+      range,
+      remaining: limit - runsById.size,
+    });
 
     for (const run of pageRuns) {
       runsById.set(String(run.databaseId), run);
@@ -324,11 +380,18 @@ function resolveWorkflowId({ repo, workflow }) {
     return workflow;
   }
 
-  const response = ghApiJson(`repos/${repo}/actions/workflows`, { per_page: '100' });
+  const response = ghApiJson(`repos/${repo}/actions/workflows`, {
+    per_page: '100',
+  });
   const workflows = response.workflows ?? [];
   const matched = workflows.find((candidate) => {
     const pathName = path.posix.basename(candidate.path ?? '');
-    return candidate.id === Number(workflow) || candidate.name === workflow || candidate.path === workflow || pathName === workflow;
+    return (
+      candidate.id === Number(workflow) ||
+      candidate.name === workflow ||
+      candidate.path === workflow ||
+      pathName === workflow
+    );
   });
 
   if (!matched) {
@@ -354,6 +417,11 @@ function normalizeWorkflowRun(run) {
   };
 }
 
+function getWorkflowRunAttempt({ repo, runId, attempt }) {
+  const run = ghApiJson(`repos/${repo}/actions/runs/${runId}/attempts/${attempt}`);
+  return normalizeWorkflowRun(run);
+}
+
 function splitCreatedRanges({ repo, workflowId, start, end }) {
   const count = countRunsInRange({ repo, workflowId, range: { start, end } });
   if (count < 1000) {
@@ -364,7 +432,9 @@ function splitCreatedRanges({ repo, workflowId, start, end }) {
   const endMs = end.getTime();
   const durationMs = endMs - startMs;
   if (durationMs <= 24 * 60 * 60 * 1000) {
-    console.warn(`Created range ${formatRange({ start, end })} still has ${count} runs; GitHub may cap this slice at 1000.`);
+    console.warn(
+      `Created range ${formatRange({ start, end })} still has ${count} runs; GitHub may cap this slice at 1000.`,
+    );
     return [{ start, end }];
   }
 
@@ -431,43 +501,30 @@ function normalizeEnd(value) {
   return new Date(value);
 }
 
-function listE2eArtifactRunIds({ repo, since, until }) {
-  const runIds = new Set();
+function hasE2eReportArtifactsForRun({ repo, runId }) {
   let page = 1;
 
   while (true) {
     const response = ghApiJson(
-      `repos/${repo}/actions/artifacts`,
+      `repos/${repo}/actions/runs/${runId}/artifacts`,
       {
         per_page: '100',
         page: String(page),
       },
-      '{artifacts: [.artifacts[] | {name, expired, created_at, workflow_run}]}',
+      '{artifacts: [.artifacts[] | {name, expired}]}',
     );
     const artifacts = response.artifacts ?? [];
     if (artifacts.length === 0) {
-      break;
+      return false;
     }
 
     for (const artifact of artifacts) {
-      if (!String(artifact.name ?? '').startsWith('e2e-report-')) {
-        continue;
-      }
-      if (artifact.expired) {
-        continue;
-      }
-      if (!isWithinRange(artifact.created_at, since, until)) {
-        continue;
-      }
-      const runId = artifact.workflow_run?.id;
-      if (runId) {
-        runIds.add(String(runId));
+      if (String(artifact.name ?? '').startsWith('e2e-report-') && !artifact.expired) {
+        return true;
       }
     }
     page += 1;
   }
-
-  return runIds;
 }
 
 function downloadArtifacts({ repo, runId, outputDir, retries }) {
@@ -494,25 +551,35 @@ function downloadArtifacts({ repo, runId, outputDir, retries }) {
 }
 
 function ghApiJson(endpoint, fields = {}, jq = '') {
-  const ghArgs = ['api', '-X', 'GET', endpoint];
-  for (const [key, value] of Object.entries(fields)) {
-    ghArgs.push('-f', `${key}=${value}`);
-  }
-  if (jq) {
-    ghArgs.push('--jq', jq);
-  }
-  const output = execFileSync('gh', ghArgs, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  return JSON.parse(output);
+  return withRetries(
+    () => {
+      const ghArgs = ['api', '-X', 'GET', endpoint];
+      for (const [key, value] of Object.entries(fields)) {
+        ghArgs.push('-f', `${key}=${value}`);
+      }
+      if (jq) {
+        ghArgs.push('--jq', jq);
+      }
+      const output = execFileSync('gh', ghArgs, {
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      return JSON.parse(output);
+    },
+    retries,
+    `GitHub API ${endpoint}`,
+    { retryPermanentUnavailable: true },
+  );
 }
 
-function withRetries(operation, retries, label) {
+function withRetries(operation, retries, label, { retryPermanentUnavailable = false } = {}) {
   let lastError = null;
   for (let attempt = 1; attempt <= Math.max(1, retries); attempt += 1) {
     try {
       return operation();
     } catch (error) {
       lastError = error;
-      if (isGhPermanentUnavailable(error)) {
+      if (isGhPermanentUnavailable(error) && !retryPermanentUnavailable) {
         throw error;
       }
       if (attempt < retries) {
@@ -526,16 +593,6 @@ function withRetries(operation, retries, label) {
 function isGhPermanentUnavailable(error) {
   const stderr = Buffer.isBuffer(error?.stderr) ? error.stderr.toString('utf8') : String(error?.stderr ?? '');
   return /HTTP (404|410)/.test(`${error?.message ?? ''}\n${stderr}`);
-}
-
-function isWithinRange(timestamp, since, until) {
-  if (!timestamp) {
-    return true;
-  }
-  const value = new Date(timestamp).getTime();
-  const start = new Date(since).getTime();
-  const end = until ? new Date(until).getTime() : Infinity;
-  return value >= start && value <= end;
 }
 
 function parseArgs(argv) {
