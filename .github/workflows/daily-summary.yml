@@ -1,0 +1,85 @@
+name: Daily E2E Metrics Summary
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Optional ISO timestamp/date to recover a wider range; defaults to three days ago"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: e2e-metrics-daily-summary
+  cancel-in-progress: false
+
+jobs:
+  summarize:
+    name: Import and summarize recent CI runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout metrics repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify metrics scripts
+        run: pnpm test
+
+      - name: Import recent AoE Desktop CI runs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AOE_DESKTOP_READ_TOKEN }}
+          SINCE_OVERRIDE: ${{ inputs.since || '' }}
+        run: |
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::AOE_DESKTOP_READ_TOKEN is required to read AoE Desktop Actions runs and artifacts."
+            exit 1
+          fi
+
+          since="${SINCE_OVERRIDE:-}"
+          if [[ -z "$since" ]]; then
+            since="$(node -e "console.log(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString())")"
+          fi
+
+          echo "Importing completed AoE Desktop CI runs since $since"
+          pnpm backfill -- \
+            --repo AOE-HQ/aoe-desktop \
+            --workflow ci.yml \
+            --since "$since" \
+            --retries 3 \
+            --quiet-skips
+
+      - name: Commit daily summary when data changed
+        shell: bash
+        run: |
+          if git diff --quiet -- data; then
+            echo "No E2E metrics data changed."
+            exit 0
+          fi
+
+          git config user.name "aoe-ci-metrics[bot]"
+          git config user.email "aoe-ci-metrics[bot]@users.noreply.github.com"
+          git add -- data
+          git commit -m "metrics: daily summary $(date -u +'%Y-%m-%d')"
+          git push
