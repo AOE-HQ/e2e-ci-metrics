@@ -57,3 +57,5 @@
 - 引用或执行本地脚本前先用 `rg --files` 确认实际文件名，尤其不要根据模块名猜测 CLI 入口；本项目小时入口是 `src/update-hourly.mjs`，不是 `src/hourly-update.mjs`。
 - PowerShell 会把未加引号的 Git revision `@{upstream}` 当成自身的哈希表语法，导致传给 Git 的参数损坏。使用 `git rev-list HEAD...'@{upstream}'`，或直接写明确的远端引用（例如 `HEAD...origin/main`）。
 - 仓库含数十 MB CSV blob 时，普通 `git fetch` 或 partial clone 的 lazy fetch 可能长时间无进展、`early EOF`，默认 rebase 还会为 cherry-pick 去重扫描所有上游数据快照。先用 `--filter=blob:none` 获取提交和树，必要时从 codeload ZIP 补齐当前目标树并用 `git hash-object` 对照 tree SHA 校验，再使用 `git rebase --reapply-cherry-picks` 避免读取无关的中间大 blob；大对象下载不得在未校验 SHA 的情况下写入对象库。
+- 仅安装 `playwright-core` 时，可执行 CLI 名称是 `playwright-core`，不是 `playwright`。CI 安装浏览器应使用 `pnpm exec playwright-core install --with-deps chromium`；否则会报 `Command "playwright" not found`。
+- 本仓库的小时 writer 可能在本地验证或多次推送之间推进 `main`。每次 push 前都用远端 SHA 对照本地 `HEAD^`；不一致时拒绝推送、fetch 新提交并 rebase，绝不能为了抢过自动数据提交而 force push。
