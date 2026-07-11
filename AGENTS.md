@@ -56,3 +56,4 @@
 - GitHub HTTPS push/fetch 在 API 正常时仍可能因 443 瞬时连接失败。有限重试后可先用 `git ls-remote git@github.com:OWNER/REPO.git` 验证 SSH，再用显式 SSH URL 推送且不修改 `origin`，最后通过 SSH ref 与 GitHub API 双重核对 SHA。
 - 引用或执行本地脚本前先用 `rg --files` 确认实际文件名，尤其不要根据模块名猜测 CLI 入口；本项目小时入口是 `src/update-hourly.mjs`，不是 `src/hourly-update.mjs`。
 - PowerShell 会把未加引号的 Git revision `@{upstream}` 当成自身的哈希表语法，导致传给 Git 的参数损坏。使用 `git rev-list HEAD...'@{upstream}'`，或直接写明确的远端引用（例如 `HEAD...origin/main`）。
+- 仓库含数十 MB CSV blob 时，普通 `git fetch` 或 partial clone 的 lazy fetch 可能长时间无进展、`early EOF`，默认 rebase 还会为 cherry-pick 去重扫描所有上游数据快照。先用 `--filter=blob:none` 获取提交和树，必要时从 codeload ZIP 补齐当前目标树并用 `git hash-object` 对照 tree SHA 校验，再使用 `git rebase --reapply-cherry-picks` 避免读取无关的中间大 blob；大对象下载不得在未校验 SHA 的情况下写入对象库。
