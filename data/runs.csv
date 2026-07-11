@@ -3604,3 +3604,4 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29143849191,1,5233,CI,docs/agent-pitfalls-20260711,82762e9a984afb2734cf774491adedf0be868963,pull_request,1859,2026-07-11T07:03:24Z,2026-07-11T08:30:30Z,success,job_log_route_metric
 29146051953,1,5235,CI,dev,254845fef767f9295c731ef9074943bcd146f720,push,,2026-07-11T08:23:59Z,2026-07-11T09:45:09Z,success,job_log_route_metric
 29148521853,1,5236,CI,fix/investigate-db-bloat,f93caae9de58b7e8e9fa4fa8da505cbcaa2b2b4c,pull_request,1857,2026-07-11T09:55:38Z,2026-07-11T09:55:39Z,skipped,inspected_ci
+29154730222,1,5237,CI,fix/runtime-has-session-running-check,9ce41cd09f65879d133701ae11b1fda5b0094694,pull_request,1860,2026-07-11T13:40:38Z,2026-07-11T14:54:45Z,failure,job_log_failure_summary
