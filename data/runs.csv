@@ -3506,9 +3506,9 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29016892900,1,5140,CI,fix/20260709-0733,e460bb2de4f3b6982ada48bb14f66eaff7171ee6,pull_request,1829,2026-07-09T12:03:56Z,2026-07-09T12:09:43Z,cancelled,unavailable_job_log
 29017192841,1,5141,CI,fix/20260709-0733,cea2ff135ddacaf6f045bcb279dea082aaca9b26,pull_request,1829,2026-07-09T12:09:20Z,2026-07-09T12:24:45Z,failure,unavailable_job_log
 29014210239,1,5139,CI,fix/20260709-0732,5fc51201b3883ec7e08b66d79602449e811c9ca1,pull_request,1828,2026-07-09T11:14:34Z,2026-07-09T12:52:38Z,failure,job_log_route_metric
-29020612214,1,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,1805,2026-07-09T13:13:46Z,2026-07-09T14:35:17Z,cancelled,job_log_route_metric
+29020612214,1,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,,2026-07-09T13:13:46Z,2026-07-09T14:35:17Z,cancelled,job_log_route_metric
 29021301605,1,5143,CI,fix/20260708-0718,571dda38e86991b1415c71c628c533418189f078,pull_request,,2026-07-09T13:25:54Z,2026-07-09T14:55:05Z,success,job_log_failure_summary;job_log_route_metric
-29020612214,2,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,1805,2026-07-09T14:43:23Z,2026-07-09T15:24:35Z,failure,job_log_route_metric
+29020612214,2,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,,2026-07-09T14:43:23Z,2026-07-09T15:24:35Z,failure,job_log_route_metric
 29024762746,1,5144,CI,fix/20260709-0734,768bde27edca8dd01ce254882817372816cd3cd6,pull_request,1831,2026-07-09T14:17:28Z,2026-07-09T15:39:32Z,failure,job_log_route_metric
 29029298594,1,5145,CI,fix/20260616-0486,6f2135cac2595bb62d21d34fa28e0df3d4a358bb,pull_request,1832,2026-07-09T15:23:24Z,2026-07-09T16:51:12Z,failure,job_log_failure_summary;job_log_route_metric
 29033098386,1,5146,CI,fix/20260616-0489,624461ee1230b4d6ac96678a350666bd6141a2e8,pull_request,,2026-07-09T16:21:29Z,2026-07-09T17:40:10Z,success,job_log_route_metric
@@ -3533,7 +3533,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29059529624,1,5165,CI,fix/20260622-0543,1ba56a2113b0bc449ace2038aefe05f3f00983d6,pull_request,1848,2026-07-10T00:15:29Z,2026-07-10T01:37:32Z,success,job_log_route_metric
 29059911187,1,5166,CI,fix/20260622-0546,db5374487e1ff02cf15ded5e2cdb2f2d683e2569,pull_request,,2026-07-10T00:25:09Z,2026-07-10T01:43:34Z,success,job_log_route_metric
 29062603028,1,5167,CI,fix/20260623-0547,ea7bab93fe2c327e27ddc101719c81f8687d510f,pull_request,,2026-07-10T01:32:28Z,2026-07-10T02:53:53Z,success,artifact_json;job_log_route_metric
-29020612214,3,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,1805,2026-07-10T04:30:42Z,2026-07-10T05:07:33Z,success,job_log_route_metric
+29020612214,3,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,,2026-07-10T04:30:42Z,2026-07-10T05:07:33Z,success,job_log_route_metric
 29069279813,1,5168,CI,fix/20260623-0560,fd57a3ccde9dc89966d0797325dcad2514ff36ad,pull_request,1851,2026-07-10T04:32:18Z,2026-07-10T05:58:26Z,success,job_log_failure_summary;job_log_route_metric
 29050439047,2,5157,CI,fix/20260617-0518,211ac91ddf219ad0c322927178857ba5b0bb9369,pull_request,,2026-07-10T05:13:31Z,2026-07-10T06:33:53Z,success,job_log_route_metric
 29072350029,1,5169,CI,fix/20260623-0564,bb14c9558564e74c92692faf46eb349d3282b292,pull_request,1852,2026-07-10T05:51:31Z,2026-07-10T07:04:59Z,failure,job_log_route_metric
@@ -3574,9 +3574,9 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29084074777,1,5205,CI,dev,df6a8d4d115db3e3fc5eda187ece72a7dd1ba528,push,,2026-07-10T09:44:55Z,2026-07-10T09:45:35Z,cancelled,unavailable_job_log
 29084169487,1,5207,CI,dev,de5aa2e37193ed0c76af67782926d165eff56b6f,push,,2026-07-10T09:46:34Z,2026-07-10T09:46:51Z,cancelled,unavailable_job_log
 29084104645,1,5206,CI,dev,67cddf199ee41de357e6c110227c1ec53699b9de,push,,2026-07-10T09:45:25Z,2026-07-10T09:47:00Z,cancelled,unavailable_job_log
-29083677143,1,5195,CI,codex/issue-1804-ci-billing-controls,f8c8303938423f90d4aa6cfa735fb6bf314993f3,pull_request,1805,2026-07-10T09:37:40Z,2026-07-10T10:02:34Z,cancelled,unavailable_job_log
+29083677143,1,5195,CI,codex/issue-1804-ci-billing-controls,f8c8303938423f90d4aa6cfa735fb6bf314993f3,pull_request,,2026-07-10T09:37:40Z,2026-07-10T10:02:34Z,cancelled,unavailable_job_log
 29084183558,1,5208,CI,dev,652252f89a4158ac36eed29809f28fb5f26071fe,push,,2026-07-10T09:46:50Z,2026-07-10T10:57:57Z,failure,job_log_failure_summary
-29085024156,1,5209,CI,codex/issue-1804-ci-billing-controls,04d596c62bb420ae32d30a46bda75be160f6b9bb,pull_request,1805,2026-07-10T10:02:13Z,2026-07-10T11:15:59Z,failure,job_log_failure_summary
+29085024156,1,5209,CI,codex/issue-1804-ci-billing-controls,04d596c62bb420ae32d30a46bda75be160f6b9bb,pull_request,,2026-07-10T10:02:13Z,2026-07-10T11:15:59Z,failure,job_log_failure_summary
 29087273903,1,5212,CI,fix/20260706-0680,6e39c8fd2167450cc0c3ab732dc695508266031f,pull_request,1799,2026-07-10T10:44:31Z,2026-07-10T11:36:44Z,failure,job_log_failure_summary
 29086740787,1,5210,CI,fix/20260617-0512,f0f77719a9d1088c450d871936acef6a55074d75,pull_request,1840,2026-07-10T10:34:11Z,2026-07-10T11:51:25Z,failure,job_log_failure_summary
 29086757035,1,5211,CI,fix/20260617-0515,59e6bf6f9d57bb1bcc130705ad7013432b2efaac,pull_request,1841,2026-07-10T10:34:29Z,2026-07-10T11:54:43Z,failure,job_log_failure_summary
@@ -3598,3 +3598,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29136482725,1,5228,CI,feat/bind-bugfix-evidence-to-final-head,779466d5aa902dff4c551c77291da2c6f0ed491c,pull_request,,2026-07-11T02:31:21Z,2026-07-11T03:53:50Z,success,job_log_route_metric
 29138735467,1,5230,CI,fix/investigate-db-bloat,0730f070434e9846f3f2a86a3250c742e30ed826,pull_request,1857,2026-07-11T03:53:52Z,2026-07-11T03:54:00Z,success,inspected_ci
 29138734561,1,5229,CI,dev,fe4f914d7dd084db236cd734164668f32ccc7421,push,,2026-07-11T03:53:50Z,2026-07-11T05:20:26Z,success,job_log_route_metric
+29142963413,1,5231,CI,codex/issue-1804-ci-billing-controls,af3fbe3abf4c10da94b1d73b0cb16eba025629a1,pull_request,,2026-07-11T06:31:32Z,2026-07-11T07:55:09Z,success,job_log_route_metric
+29143791514,1,5232,CI,docs/e2e-escape-pitfalls-20260711,472a872316d52dfa995270b7b7a3167b9029e920,pull_request,,2026-07-11T07:01:22Z,2026-07-11T08:23:55Z,success,job_log_route_metric
+29145289448,1,5234,CI,dev,0da6965c25f42b2afd5a00534e7adff8402c8d14,push,,2026-07-11T07:55:14Z,2026-07-11T08:24:19Z,cancelled,job_log_route_metric
+29143849191,1,5233,CI,docs/agent-pitfalls-20260711,82762e9a984afb2734cf774491adedf0be868963,pull_request,1859,2026-07-11T07:03:24Z,2026-07-11T08:30:30Z,success,job_log_route_metric
