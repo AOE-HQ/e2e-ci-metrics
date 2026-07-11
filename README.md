@@ -3,18 +3,41 @@
 This public repository stores route-level CSV metrics for AoE Desktop GitHub CI
 Playwright E2E runs.
 
-## GitHub Pages
+## Run Locally
 
-The public dashboard is generated from the CSV files and deployed with GitHub
-Pages:
+Prerequisites: Node.js 22 and pnpm 10.24.0 (the version declared in
+`package.json`). Install dependencies, build the static dashboard, and serve the
+generated `dist/` directory:
 
 ```bash
+pnpm install --frozen-lockfile
+pnpm build:pages
+pnpm dlx serve dist --listen 4173
+```
+
+Open <http://localhost:4173> in a browser. Stop the local server with `Ctrl+C`.
+Re-run `pnpm build:pages` after changing source code or CSV data. The dashboard
+must be served over HTTP because it loads generated data files with `fetch`;
+opening `dist/index.html` directly is not supported.
+
+## GitHub Pages
+
+The dashboard is generated from the CSV files and deployed with GitHub Pages:
+
+```bash
+pnpm test
 pnpm build:pages
 ```
 
 The generated site reads the copied CSV files from `dist/data/` and exposes the
-same raw CSV files for download. The deploy workflow runs on `main` pushes and
-uses GitHub Pages Actions deployment.
+same raw CSV files for download. The deploy workflow runs on eligible `main`
+pushes and can also be dispatched explicitly by the metrics update workflows.
+
+In Route Explorer, search for a route and use **View failed commits** to load its
+all-time final-failure history. The detail view groups macOS and Windows failures
+by commit and links the commit, known PR, and GitHub Actions runs. Historical
+failure data is emitted as a small route index plus per-route JSON shards so it
+does not add the full result history to the initial page load.
 
 Because this repository is public, route ids, module tags, branch names, run
 ids, SHAs, CI conclusions, and normalized error signatures are public data. Do
@@ -25,10 +48,10 @@ to any CSV in this repository.
 
 Version 1 tracks only the AoE Desktop Mock E2E Playwright `electron` project from
 the main CI workflow. Unit tests, lint, format, build, visual tests, and
-`electron-real` are intentionally out of scope. Playwright JSON artifacts are the
-full-observation source of truth for pass rates; GitHub job logs are used only as
-a fallback to recover failed/flaky route signals when old JSON artifacts are no
-longer available.
+`electron-real` are intentionally out of scope. Complete Playwright outcomes
+parsed from GitHub job logs are the source of truth for pass rates. Legacy JSON
+artifacts are retained only as route-discovery fallback data when complete logs
+are unavailable.
 
 ## Data Files
 
@@ -48,33 +71,33 @@ An E2E route id is:
 
 The route id must never use execution order, test index, or line number.
 
-## Daily Summary Update
+## Automated Updates
 
-AoE Desktop CI uploads Playwright JSON artifacts named `e2e-report-macos` and
-`e2e-report-windows` with 30-day retention. Product CI does not clone or write
-this repository after each run.
+AoE Desktop product CI does not clone or write this repository. The metrics
+workflows use `AOE_DESKTOP_READ_TOKEN` to read completed macOS and Windows jobs,
+prefer complete route outcomes parsed from job logs, and use downloaded
+Playwright JSON reports only as route-discovery fallback data.
 
-`.github/workflows/daily-summary.yml` runs once per UTC day, scans an overlapping
-three-day window of completed `AOE-HQ/aoe-desktop` `ci.yml` runs, imports run
-attempts idempotently, and creates at most one data commit when the aggregate
-changed. The overlap tolerates one or more delayed schedules without duplicating
-rows. The job only runs from the repository `main` ref, explicitly checks out
-`main`, and pushes `HEAD:main`; manual dispatches from other refs are skipped.
-The importer enumerates every available rerun attempt and queries artifacts per
-recent run instead of scanning repository-wide artifact history. Temporary
-`unavailable_job_log` observations remain retryable. A log-only
-`job_log_failure_summary` for the latest attempt also remains retryable, so a
-later JSON artifact can replace the partial fallback with complete route results;
-after a rerun makes it a prior attempt, the log result becomes terminal because
-GitHub exposes artifacts per run rather than per attempt.
+`.github/workflows/hourly-metrics.yml` performs the normal incremental update at
+minute 17 of each hour. It resumes from
+`state/aoe-desktop-ci-checkpoint.json`, commits the CSV files and checkpoint as a
+single serialized writer, and explicitly dispatches the Pages workflow when data
+changes. See `docs/hourly-update.md` for checkpoint and recovery details.
+
+`.github/workflows/daily-summary.yml` runs once per UTC day and scans an
+overlapping three-day window. It imports run attempts idempotently and creates at
+most one data commit when the aggregate changes, providing a bounded recovery
+path when one or more hourly schedules are delayed. Both writers share the
+`e2e-ci-metrics-writer` concurrency group.
 
 Configure `AOE_DESKTOP_READ_TOKEN` as a repository Actions secret. Use a
 fine-grained token restricted to `AOE-HQ/aoe-desktop` with Actions read access
-and repository contents/metadata read access. The scheduled workflow uses the
-metrics repository `GITHUB_TOKEN` only for its own `main` push.
+and repository contents/metadata read access. The metrics repository
+`GITHUB_TOKEN` is used separately for its own `main` pushes and Pages dispatches.
 
-For recovery, manually dispatch `Daily E2E Metrics Summary` and provide an ISO
-date or timestamp in the `since` input. The workflow executes the equivalent of:
+For wider recovery, manually dispatch `Daily E2E Metrics Summary` and provide an
+ISO date or timestamp in the `since` input. The workflow executes the equivalent
+of:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -105,19 +128,29 @@ route_id,module_tags,note
 
 ## Historical Backfill
 
-Historical data is best-effort. Backfill first imports Playwright JSON artifacts
-when GitHub still has them; when an old failed run no longer has E2E artifacts,
-it downloads the failed macOS/Windows Test job logs and recovers the final
-Playwright `failed`/`flaky` summary lines as failure-only route signals. Run
-backfill manually from this repository:
+Historical data is best-effort. Backfill downloads the macOS/Windows Test job
+logs and parses standard Playwright list-reporter rows (`✓`/`✘` on macOS,
+`ok`/`x` on Windows, and `-` for skipped routes). A run/platform is counted as a
+complete observation only when the parsed route outcomes match the Playwright
+footer totals. Older logs that contain only failure summaries remain partial
+failure/flaky signals. Run backfill manually from this repository:
 
 ```bash
 pnpm backfill -- --repo AOE-HQ/aoe-desktop --workflow ci.yml --since 2026-01-01
 ```
 
-Normal AoE Desktop CI only uploads the current run artifacts. The daily summary
-uses this backfill command with a bounded recent window; wider historical scans
-remain manual.
+To upgrade only rows from a legacy source without expanding every historical
+run, use a bounded date range and `--refresh-source`, for example:
+
+```bash
+pnpm backfill -- --repo AOE-HQ/aoe-desktop --workflow ci.yml \
+  --since 2026-07-07 --until 2026-07-09 \
+  --refresh-source artifact_json
+```
+
+The hourly updater handles normal incremental imports. The daily summary uses
+the same backfill path with a bounded recent window; wider historical scans and
+source migrations remain manual.
 
 The updater is idempotent by `run_id` and `run_attempt`: rerunning the same CI
 attempt replaces that attempt's rows, then recomputes aggregate CSV files from
@@ -125,7 +158,8 @@ the full `route_results.csv`. It does not delete other historical runs.
 
 Backfill automatically splits large created-date ranges before listing workflow
 runs because GitHub caps a single Actions run search window at 1000 results.
-For each recent run and rerun attempt, it queries that run's `e2e-report-*`
-artifacts directly. Attempts without usable artifacts are still inspected for
-log-recoverable E2E failures. Temporary log failures and the latest attempt's
-log-only fallback are retried by later overlapping daily summaries.
+GitHub API and log downloads are retried. Imported runs are written in batches
+so a bounded refresh does not repeatedly rewrite the entire CSV dataset. Each
+run attempt is inspected independently; temporary log failures, artifact-only
+fallbacks, and unavailable logs remain retryable until complete outcomes are
+persisted.

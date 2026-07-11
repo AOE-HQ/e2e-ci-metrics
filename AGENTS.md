@@ -1,0 +1,58 @@
+# 项目协作约定
+
+- 所有推送仓库默认私有（private）。
+- Python 包管理默认使用 `uv`。
+- Node 包管理默认使用 `pnpm`。
+- 使用中文交流。
+- 写入大文件时，少量多次进行编辑。
+- 修改交互细节后，必须增加对应的 e2e 测试验证行为。
+- 每次会话结束前，如果有命令执行失败，必须总结失败模式和根因，并把避坑规则追加到本文件。
+
+## 避坑规则
+
+- 写入 `allkeys.json` 等被 `switch.py` 读取的 JSON 文件时，绝不能带 UTF-8 BOM。`switch.py` 使用 `json.load` + `utf-8`，遇到 BOM 会报 `Unexpected UTF-8 BOM`。PowerShell 的 `Set-Content -Encoding UTF8` 会写 BOM；改用 `Set-Content -Encoding utf8NoBOM`（PowerShell 6+）、`[System.IO.File]::WriteAllText(..., (New-Object System.Text.UTF8Encoding($false)))`，或直接用 Python 写。
+- `gopass` 解密失败有时只是 GPG pinentry 弹窗等待用户输入超时，并非密钥或 recipient 问题。看到 `Decryption failed: exit status 1` 时先重试并留时间确认 pinentry，再排查 recipient。
+- PowerShell 插值字符串中不要直接写复杂的数组计数子表达式（例如容易误写的 `$((@(...)).Count)`）。先把 `@(...).Count` 赋给变量，再插值输出，避免 `IncompleteDollarSubexpressionReference`。
+- Windows PowerShell 5.1 的 `Format-Hex` 不支持 `-Count`。需要检查文件头时，使用 `[System.IO.File]::ReadAllBytes()` 后切片。
+- 在 PowerShell 命令字符串里传包含 `[`、`]`、双引号等字符的正则时，优先给 `rg`/`Select-String` 使用单引号参数，或拆成多个简单模式；不要把复杂正则直接嵌入双引号命令，否则 PowerShell 可能把 `[` 解析为数组索引并报语法错误。
+- 历史日志回填不得逐 run 重写和重算完整 CSV，也不要对全部历史记录直接执行无边界 `--refresh`。使用批量落盘，并用限定日期范围的 `--refresh-source <source>` 做受控迁移，避免 O(run × 全表大小) 的退化和超大 `route_results.csv`。
+- GitHub Actions 日志与 API 读取会出现瞬时 `wsarecv`、`i/o timeout`、blob `EOF` 或过期日志 404。所有只读 `gh api` 请求应使用有限次数重试；单个平台日志最终不可用时保留 partial/unknown，不得推断 success，也不得让整个批次失败。
+- Windows PTY 中用 Ctrl-C 中止嵌套 `pnpm` 命令时，可能连续出现 `Terminate batch job (Y/N)?`。只有在确认当前批次已安全落盘或可重跑后才中止，并准备对每一层提示回答 `Y`。
+- PowerShell 中用单引号传给 `rg` 的模式如果自身还包含单引号，会提前结束字符串并把后续内容误解析为管道或路径。此时改用多个 `rg -F` 固定字符串查询，或在 PowerShell 单引号字符串内把单引号写成两个连续单引号。
+- Windows PowerShell 不会为 `rg` 的位置路径参数可靠展开 `*.yml` 等通配符。使用 `rg -g '*.yml' <目录>`，或先用 `rg --files -g '*.yml'` 获取文件列表。
+- `rg` 搜索模式如果以 `-` 或 `--` 开头，会被当成命令选项。必须用 `rg -- '<pattern>' <path>` 显式结束选项解析。
+- Windows PowerShell 5.1 中需要按第一字段降序、第二字段升序时，不能写 `Sort-Object Count -Descending, Name`。使用 `Sort-Object @{Expression='Count';Descending=$true}, @{Expression='Name';Descending=$false}`。
+- `git diff --no-index` 在发现差异时会按设计返回退出码 1。只读诊断中若差异是预期结果，应显式接受并归一化该退出码，或直接用 `Get-Content` 查看未跟踪文件，避免把“有差异”误报为命令故障。
+- TDD 的 RED 阶段会有意让测试命令退出 1；应先用测试名筛选隔离目标行为，并把预期 RED 与环境/依赖故障分开记录。修改共享 e2e fixture 时要同步检查所有依赖该 fixture 的既有断言。
+- 在脏工作区或持续变化的文件上应用较大 `apply_patch` 前，先重新读取目标片段并拆成小 patch；否则旧上下文会导致 `apply_patch verification failed`，还可能掩盖并发产生的新改动。
+- 按诊断流程在修复前运行回归 e2e 时，目标断言会按预期以 exit code 1 结束。必须先确认失败内容精确命中待修 bug，再修复并用同一命令转绿；不要把预期红测误判为环境故障，也不要省略最终复跑。
+- 用 `rg` 验证“某标记不存在”时，无匹配会返回 exit code 1，即使这正是期望结果。此类否定检查应显式处理 `$LASTEXITCODE -eq 1`，或改用不会把无匹配当命令失败的 PowerShell 布尔检查。
+- 多 agent 共享工作树时，不要在另一个 agent 正在编辑同一实现或 fixture 文件期间启动测试；测试进程可能读取到前后两个版本，出现颜色期望、fixture 数量等互相矛盾的瞬时失败。先确认相关 agent 已结束并核对文件修改时间，再从稳定工作树复跑。
+- 验证 success/flaky/failed 的视觉顺序时，fixture 必须让三种结果都为非零，并按 DOM 中的计算后背景色断言绿→黄→红；若某段宽度为 0，截图可能掩盖实际顺序反转。
+- 同一表格行的多个列可能重复出现 `Partial logs` 等文案。e2e 文案断言应先用 `data-label` 收紧到目标单元格，避免目标列已修复却被其他列的旧文案误判为失败。
+- flaky 同时存在 bar 填充色和 metric、pill、正文文字色；修改状态色时必须分别覆盖这些表面，不能只改 bar，否则页面仍会混用黄色和橙色。
+- 成功率的说明文字必须明确分母为 `complete outcomes`。partial logs 没有成功数据，不能用 `all` 等模糊词暗示它们进入了成功率分母。
+- `rg` 的搜索模式如果以 `-` 或 `--` 开头，必须在选项后加 `--`（例如 `rg -n -- '--yellow-text|...' file`），否则模式会被解析成未知命令行参数并返回失败。
+- PowerShell 5.1 不能可靠地把 `foreach (...) { ... }` 的输出直接接到管道；可能报 `An empty pipe element is not allowed`。先把循环输出赋给变量，再将变量传给 `Format-Table` 等后续命令。
+- 在 PowerShell 数组构造中需要使用 `Count - 1`、分位点等算术结果时，先分别计算为标量变量，再传给 `@(...)`；不要把数组表达式和减法混写，否则可能对整个 `System.Object[]` 执行减法。
+- PowerShell 5.1 向 native `node -e` 传递多行 JS 或含嵌入双引号的 JS 时可能剥离引号；优先用单引号字面量、Base64，或将 ASCII-only here-string 通过 stdin 交给 `node --input-type=module -`。若脚本含 `✓`、`✘`、`›` 等 Unicode，使用 `\uXXXX` 转义，避免 PowerShell 管道编码把字符变成 `?`。
+- PowerShell 5.1 中复杂 `gh api --jq`（尤其含字符串字面量）可能被 native 参数解析拆坏。改用简单 jq 后在本地筛选，或使用可靠的 encoded/temp script 传参，不要直接内联复杂 jq。
+- Windows PowerShell 对 `[System.IO.File]::ReadLines(...).Count` 的结果可能按 `Object[]` 处理，后续算术会失败。统计行数时使用 `Measure-Object -Line`，或显式遍历并累加到标量变量。
+- 在一个 `apply_patch` 中修改同一大文件的多个离散行时，各 hunk 必须按它们在文件中的实际先后顺序排列；若按 ID 等其他字段排序，补丁游标回跳会触发 `verification failed`。先按原文件行号排序，再分小批应用。
+- PowerShell 5.1 中不要用 `gh api graphql -f "query=$query"` 直接传含字符串字面量的 GraphQL；native 参数解析可能剥掉内部引号。改用 JSON stdin 传 query/variables；GraphQL 连续返回 502 时，回退到等价 REST 查询。
+- PowerShell 插值变量后如果紧接冒号，必须写成 `${name}:`；直接写 `$name:` 会被解析成无效变量引用。
+- `@(ConvertFrom-Json -InputObject $raw)` 可能把顶层 JSON 数组包成一个嵌套项，导致后续属性变成 `Object[]`。先执行 `$parsed = ConvertFrom-Json -InputObject $raw`，再显式枚举 `$parsed`。
+- PowerShell 中一次查多个符号时，优先拆成多个 `rg -F`；不要把带 `|`、嵌套引号或括号的复合模式塞进双引号命令字符串，否则 native 参数可能被拆成路径或管道。
+- 临时 Node 静态服务器的 `try/catch` 只包裹文件读取；不要把 `response.writeHead()` / `response.end()` 也包进去，否则响应发送后的异常会进入 catch 并再次写 header，触发 `ERR_HTTP_HEADERS_SENT`。
+- 某些 unified exec 后端不支持通过 `write_stdin` 发送 Ctrl-C，中止长驻本地服务器会报 `process interrupt is not supported`。在 Windows 上改用 `Get-NetTCPConnection` 查监听端口的 `OwningProcess`，核对进程名后用 `Stop-Process` 结束。
+- 在 PowerShell 命令字符串中搜索含 HTML 双引号的属性（如 `id="..."`）时，嵌套双引号容易导致 `The string is missing the terminator`。优先用 `Select-String -SimpleMatch` 配合单引号 pattern，或拆成多个固定字符串查询。
+- 用 Ctrl-C 结束仅供本地验证的长期运行 Node 静态服务器时，进程通常以 exit code 1 退出；若已看到 `ready` 且没有运行时错误，这是预期终止，不应误判为构建或测试失败。
+- Windows PowerShell 不会把 `src/*.mjs`、`tests/*.mjs` 这类路径 glob 展开给 `rg`；必须改用 `rg <pattern> src tests -g '*.mjs'`，不要把 glob 当作位置路径传入。
+- 不要把 `git show ...` 直接管道到会提前停止读取的 `Select-Object -First`；下游关闭管道可能让 `git show` 因 broken pipe 返回非零。先把完整输出赋给变量，再截取需要的行。
+- 用 `git grep` 或 `rg` 做“应无匹配”的否定检查时，exit code 1 是预期结果；必须显式接受该退出码或改成 PowerShell 布尔判断，避免把成功的否定断言记成命令故障。
+- `git merge-tree --write-tree` 发现真实合并冲突时会按设计返回 exit code 1；预检脚本应显式把该退出码解释为“需要语义合并”，不要误判为工具故障。
+- 在 `functions.exec` 的 JavaScript 模板字符串里嵌 PowerShell 命令时，不要包含未转义的 PowerShell反引号（例如 `` `n ``）；它会提前结束 JavaScript 模板字符串并触发 `SyntaxError`。改用 `[Environment]::NewLine` 或拆成简单命令。
+- 检查 CLI 是否支持某参数时，只匹配参数名，不要硬编码帮助文本里的类型标注；例如 `gh run view --attempt` 的类型显示为 `uint`，不是 `int`。
+- GitHub HTTPS push/fetch 在 API 正常时仍可能因 443 瞬时连接失败。有限重试后可先用 `git ls-remote git@github.com:OWNER/REPO.git` 验证 SSH，再用显式 SSH URL 推送且不修改 `origin`，最后通过 SSH ref 与 GitHub API 双重核对 SHA。
+- 引用或执行本地脚本前先用 `rg --files` 确认实际文件名，尤其不要根据模块名猜测 CLI 入口；本项目小时入口是 `src/update-hourly.mjs`，不是 `src/hourly-update.mjs`。
+- PowerShell 会把未加引号的 Git revision `@{upstream}` 当成自身的哈希表语法，导致传给 Git 的参数损坏。使用 `git rev-list HEAD...'@{upstream}'`，或直接写明确的远端引用（例如 `HEAD...origin/main`）。

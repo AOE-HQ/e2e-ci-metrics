@@ -28,7 +28,7 @@
 | `started_at` | Run start timestamp when available. |
 | `completed_at` | Run completion timestamp. |
 | `conclusion` | Overall test conclusion as reported by AoE Desktop CI. |
-| `data_source` | Semicolon-separated metric sources used for this run: `inspected_ci`, `artifact_json`, `job_log_failure_summary`, or `unavailable_job_log`. |
+| `data_source` | Semicolon-separated metric sources used for this run: `job_log_route_metric` for footer-verified full log outcomes, `job_log_failure_summary` for legacy partial log signals, `inspected_ci`, or `unavailable_job_log`. `artifact_json` is retained only as a legacy route-catalog marker. |
 
 ## `data/route_results.csv`
 
@@ -45,7 +45,7 @@
 | `attempt_failures` | Number of failed/timed-out/interrupted attempts. |
 | `error_signature` | Normalized first error line when available. |
 | `artifact_url` | GitHub Actions run URL or artifact URL. |
-| `data_source` | `artifact_json` for full Playwright JSON observations, or `job_log_failure_summary` for failure-only log recovery. |
+| `data_source` | `job_log_route_metric` for full route observations parsed from standard Playwright list-reporter rows and verified against footer totals, `job_log_failure_summary` for legacy failure-only log recovery, or `artifact_json` for legacy Playwright JSON rows kept only for route discovery. |
 
 ## `data/route_stats.csv`
 
@@ -53,20 +53,20 @@
 | --- | --- |
 | `route_id` | Stable route id. |
 | `module_tags` | Semicolon-separated product module tags. |
-| `total_runs` | Count of all non-skipped route result rows, including log-recovered failure signals. |
-| `full_runs` | Count of non-skipped full Playwright JSON observations. This is the denominator for `pass_rate`. |
-| `full_failed_runs` | Count of final failed full Playwright JSON observations. |
-| `full_flaky_runs` | Count of retry-recovered flaky full Playwright JSON observations. |
-| `log_signal_runs` | Count of failure-only rows recovered from GitHub job logs after JSON artifacts were unavailable. |
+| `total_runs` | Count of non-skipped route result rows derived from GitHub job logs. Legacy artifact rows are excluded. |
+| `full_runs` | Count of non-skipped full route observations from `job_log_route_metric`. This is the denominator for `pass_rate`. |
+| `full_failed_runs` | Count of final failed full route observations from `job_log_route_metric`. |
+| `full_flaky_runs` | Count of retry-recovered flaky full route observations from `job_log_route_metric`. |
+| `log_signal_runs` | Count of non-skipped rows recovered from GitHub job logs, including full JSONL route metrics and legacy failure-only summaries. |
 | `log_failed_runs` | Count of final failed rows recovered from GitHub job logs. |
 | `log_flaky_runs` | Count of retry-recovered flaky rows recovered from GitHub job logs. |
 | `failed_runs` | Count of final failed route result rows, including log-recovered failures. |
 | `flaky_runs` | Count of retry-recovered route result rows, including log-recovered flaky signals. |
 | `attempt_failures` | Sum of raw failed attempts. |
-| `pass_rate` | Full-observation pass rate from `artifact_json` rows only, four decimals; blank when no full observation exists. |
+| `pass_rate` | Clean success rate from `job_log_route_metric` rows only: `passed / (passed + flaky + failed)`, four decimals; blank when no full log observation exists. |
 | `failed_runs_macos` | Final failed result count on macOS. |
 | `failed_runs_windows` | Final failed result count on Windows. |
-| `last_outcome` | Latest outcome by run completion time. |
+| `last_outcome` | Latest log-derived outcome by run completion time. |
 | `last_failed_at` | Latest completion time where the route finally failed. |
 | `top_error_signature` | Most frequent non-empty error signature. |
 
@@ -77,18 +77,18 @@
 | `route_id` | Stable route id. |
 | `platform` | `macos` or `windows`. |
 | `module_tags` | Semicolon-separated product module tags. |
-| `total_runs` | Count of all non-skipped route result rows for this route on this platform. |
-| `full_runs` | Count of non-skipped full Playwright JSON observations for this route on this platform. |
-| `full_failed_runs` | Count of final failed full Playwright JSON observations for this route on this platform. |
-| `full_flaky_runs` | Count of retry-recovered flaky full Playwright JSON observations for this route on this platform. |
-| `log_signal_runs` | Count of failure-only rows recovered from GitHub job logs for this route on this platform. |
+| `total_runs` | Count of non-skipped log-derived route result rows for this route on this platform. Legacy artifact rows are excluded. |
+| `full_runs` | Count of non-skipped full route observations from `job_log_route_metric` for this route on this platform. |
+| `full_failed_runs` | Count of final failed full route observations from `job_log_route_metric` for this route on this platform. |
+| `full_flaky_runs` | Count of retry-recovered flaky full route observations from `job_log_route_metric` for this route on this platform. |
+| `log_signal_runs` | Count of non-skipped rows recovered from GitHub job logs for this route on this platform. |
 | `log_failed_runs` | Count of final failed rows recovered from GitHub job logs for this route on this platform. |
 | `log_flaky_runs` | Count of retry-recovered flaky rows recovered from GitHub job logs for this route on this platform. |
 | `failed_runs` | Count of final failed route result rows for this route on this platform, including log-recovered failures. |
 | `flaky_runs` | Count of retry-recovered route result rows for this route on this platform, including log-recovered flaky signals. |
 | `attempt_failures` | Sum of raw failed attempts for this route on this platform. |
-| `pass_rate` | Full-observation pass rate from `artifact_json` rows only, four decimals; blank when no full observation exists. |
-| `last_outcome` | Latest outcome by run completion time for this route on this platform. |
+| `pass_rate` | Clean success rate from `job_log_route_metric` rows only: `passed / (passed + flaky + failed)`, four decimals; blank when no full log observation exists. |
+| `last_outcome` | Latest log-derived outcome by run completion time for this route on this platform. |
 | `last_failed_at` | Latest completion time where this route finally failed on this platform. |
 | `top_error_signature` | Most frequent non-empty error signature for this route on this platform. |
 
