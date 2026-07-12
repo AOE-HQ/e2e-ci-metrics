@@ -3546,7 +3546,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29082256079,1,5178,CI,dev,00a644bc168a23780c1e8d501e43471e49449dac,push,,2026-07-10T09:12:12Z,2026-07-10T09:12:37Z,cancelled,unavailable_job_log
 29082156839,1,5177,CI,dev,d89cd43ca71c1183901e690761827651b9a8fe51,push,,2026-07-10T09:10:24Z,2026-07-10T09:12:41Z,cancelled,unavailable_job_log
 29082278012,1,5179,CI,dev,cf7620cdd31006fff666c5250ee23736407208e1,push,,2026-07-10T09:12:36Z,2026-07-10T09:13:50Z,cancelled,unavailable_job_log
-29082330626,1,5180,CI,dev,01b1079eead81d9f6b97bdcca62a520be586d132,push,,2026-07-10T09:13:34Z,2026-07-10T09:14:58Z,cancelled,artifact_json
+29082330626,1,5180,CI,dev,01b1079eead81d9f6b97bdcca62a520be586d132,push,,2026-07-10T09:13:34Z,2026-07-10T09:14:58Z,cancelled,unavailable_job_log
 29082390219,1,5181,CI,dev,7552f72f1c9abf3faf760860e3a23694e631d143,push,,2026-07-10T09:14:38Z,2026-07-10T09:15:00Z,cancelled,unavailable_job_log
 29082409746,1,5182,CI,dev,cc14ec05d05582a9f6fdae6dd3297b3b6fbb6852,push,,2026-07-10T09:14:59Z,2026-07-10T09:17:13Z,cancelled,unavailable_job_log
 29082542869,1,5184,CI,dev,d1af1fe4eceb28c9bd43ae0d4ed675ac6d831692,push,,2026-07-10T09:17:16Z,2026-07-10T09:17:36Z,cancelled,unavailable_job_log
@@ -3607,3 +3607,4 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29154730222,1,5237,CI,fix/runtime-has-session-running-check,9ce41cd09f65879d133701ae11b1fda5b0094694,pull_request,1860,2026-07-11T13:40:38Z,2026-07-11T14:54:45Z,failure,job_log_failure_summary
 29178139984,1,5238,CI,docs/agent-pitfalls-20260711,9404f70b3b72f15819eec2d62cef0bbe0da52fc4,pull_request,,2026-07-12T03:22:13Z,2026-07-12T04:43:32Z,success,job_log_failure_summary;job_log_route_metric
 29178398663,1,5239,CI,fix/runtime-has-session-running-check,a90c2693a7ff09aab8df225bd1bba77b5d48e345,pull_request,1860,2026-07-12T03:32:56Z,2026-07-12T04:55:24Z,success,job_log_route_metric
+29180130320,1,5240,CI,dev,d5b17a5749ba94b0a8c9e08ff7600afef903f475,push,,2026-07-12T04:43:36Z,2026-07-12T06:04:02Z,success,job_log_route_metric
