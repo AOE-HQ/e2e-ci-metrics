@@ -3609,3 +3609,4 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29178398663,1,5239,CI,fix/runtime-has-session-running-check,a90c2693a7ff09aab8df225bd1bba77b5d48e345,pull_request,1860,2026-07-12T03:32:56Z,2026-07-12T04:55:24Z,success,job_log_route_metric
 29180130320,1,5240,CI,dev,d5b17a5749ba94b0a8c9e08ff7600afef903f475,push,,2026-07-12T04:43:36Z,2026-07-12T06:04:02Z,success,job_log_route_metric
 29188708198,1,5241,CI,codex/fix-e9001-auto-resume-runtime-anchor,9d3fea89e754b1a29576d69c214df5015795ae9f,pull_request,1742,2026-07-12T10:11:04Z,2026-07-12T11:25:46Z,failure,job_log_route_metric
+29194208829,1,5242,CI,codex/fix-e9001-auto-resume-runtime-anchor,f904d7b963baaae796e9c0a2afc40307f9c1fec9,pull_request,1742,2026-07-12T13:19:56Z,2026-07-12T13:46:24Z,failure,unavailable_job_log
