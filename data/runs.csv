@@ -3504,7 +3504,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29010698076,1,5137,CI,fix/platform-ai-proxy-chat-model-blacklist,f9558d936d61e7ece8bf354c387b9ba62fd8e7d7,pull_request,,2026-07-09T10:10:09Z,2026-07-09T11:30:05Z,success,artifact_json;job_log_route_metric
 29011946237,1,5138,CI,dev,a58a3f31c912e97617d3d3943704c1eb004665c7,push,,2026-07-09T10:32:36Z,2026-07-09T12:05:33Z,success,job_log_route_metric
 29016892900,1,5140,CI,fix/20260709-0733,e460bb2de4f3b6982ada48bb14f66eaff7171ee6,pull_request,1829,2026-07-09T12:03:56Z,2026-07-09T12:09:43Z,cancelled,unavailable_job_log
-29017192841,1,5141,CI,fix/20260709-0733,cea2ff135ddacaf6f045bcb279dea082aaca9b26,pull_request,1829,2026-07-09T12:09:20Z,2026-07-09T12:24:45Z,failure,unavailable_job_log
+29017192841,1,5141,CI,fix/20260709-0733,cea2ff135ddacaf6f045bcb279dea082aaca9b26,pull_request,1829,2026-07-09T12:09:20Z,2026-07-09T12:24:46Z,failure,unavailable_job_log
 29014210239,1,5139,CI,fix/20260709-0732,5fc51201b3883ec7e08b66d79602449e811c9ca1,pull_request,1828,2026-07-09T11:14:34Z,2026-07-09T12:52:38Z,failure,job_log_route_metric
 29020612214,1,5142,CI,codex/issue-1804-ci-billing-controls,b138b513ff61030a268223a0f88d0612ecca19ca,pull_request,,2026-07-09T13:13:46Z,2026-07-09T14:35:17Z,cancelled,job_log_route_metric
 29021301605,1,5143,CI,fix/20260708-0718,571dda38e86991b1415c71c628c533418189f078,pull_request,,2026-07-09T13:25:54Z,2026-07-09T14:55:05Z,success,job_log_failure_summary;job_log_route_metric
@@ -3642,7 +3642,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29221439559,1,5252,CI,fix/20260617-0512,ffdb3656bb0ba2a0724a112d244207fb6718aaa5,pull_request,1840,2026-07-13T03:19:19Z,2026-07-13T08:21:12Z,success,job_log_route_metric
 29222664609,1,5260,CI,fix/20260706-0681,17c792ec35d1b1650580428d6f3d78d170137bfb,pull_request,1800,2026-07-13T03:53:48Z,2026-07-13T08:27:27Z,failure,job_log_route_metric
 29222859597,1,5262,CI,fix/20260702-0646,de74e993556914c12c784e4eb9a60a2263612620,pull_request,1796,2026-07-13T03:59:17Z,2026-07-13T08:31:47Z,failure,job_log_route_metric
-29233041567,1,5279,CI,fix/ci-common-prepush-git-env,372ba7c75a074ecd38ba540d6bc594a2d6612978,pull_request,1862,2026-07-13T07:44:18Z,2026-07-13T08:33:13Z,failure,job_log_route_metric
+29233041567,1,5279,CI,fix/ci-common-prepush-git-env,372ba7c75a074ecd38ba540d6bc594a2d6612978,pull_request,,2026-07-13T07:44:18Z,2026-07-13T08:33:13Z,failure,job_log_route_metric
 29223667781,1,5266,CI,fix/20260709-0728,8ab0089c4adb317511797a4f83e7ab9d1a03cd0a,pull_request,1813,2026-07-13T04:19:46Z,2026-07-13T08:52:16Z,success,job_log_failure_summary;job_log_route_metric
 29222225279,1,5256,CI,fix/20260617-0499,d8e71e3e93605527187a27514faf827eca9dfe55,pull_request,1834,2026-07-13T03:41:22Z,2026-07-13T09:26:17Z,success,job_log_failure_summary;job_log_route_metric
 29223326864,1,5264,CI,fix/20260625-0582,adceacae089b2c518176647783d606106dea0b5a,pull_request,1756,2026-07-13T04:11:29Z,2026-07-13T09:27:57Z,success,job_log_route_metric
@@ -3654,3 +3654,19 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29233724069,1,5281,CI,dev,9e251a4b3a7a3a14b95f30f3a0662f1a821205ad,push,,2026-07-13T07:56:54Z,2026-07-13T11:15:55Z,success,job_log_route_metric
 29240250328,1,5287,CI,fix/20260612-0465,1bd292f0331dec5f3eeaddd06aacf6c3c64d3f88,workflow_dispatch,1817,2026-07-13T09:44:47Z,2026-07-13T11:15:58Z,success,job_log_route_metric
 29234689289,1,5283,CI,fix/20260708-0723,a0d5b7d2818f429675e4eb65d264b77ca3cada4f,pull_request,1810,2026-07-13T08:13:43Z,2026-07-13T11:21:29Z,success,job_log_route_metric
+29235708145,1,5285,CI,fix/20260707-0703,ba6dc83371b6fec8dd62cf16634ea49500ae3f75,pull_request,1823,2026-07-13T08:30:57Z,2026-07-13T11:55:22Z,success,job_log_route_metric
+29242839189,1,5288,CI,fix/20260629-0603,288235cdd07ff016d416796656c838cbc25f4b3a,pull_request,1721,2026-07-13T10:27:55Z,2026-07-13T12:09:14Z,success,job_log_route_metric
+29248095877,1,5291,CI,fix/quicklook-thumbnail-crash,e8ad2b500f0b1ce34f7351fb6c25c27882061657,pull_request,1863,2026-07-13T11:58:12Z,2026-07-13T12:26:46Z,cancelled,unavailable_job_log
+29236534385,1,5286,CI,fix/ci-common-prepush-git-env,a9f8155966e062a1a3b5b8c6508e4944aeb3ae16,pull_request,,2026-07-13T08:45:06Z,2026-07-13T12:30:40Z,success,job_log_route_metric
+29017192841,2,5141,CI,fix/20260709-0733,cea2ff135ddacaf6f045bcb279dea082aaca9b26,pull_request,1829,2026-07-13T08:43:08Z,2026-07-13T12:40:16Z,success,job_log_failure_summary;job_log_route_metric
+29248946849,1,5292,CI,fix/20260701-0630,e47849baba4c3a57fe0f0ba2e51243699504fb9d,pull_request,1786,2026-07-13T12:11:49Z,2026-07-13T12:49:53Z,cancelled,job_log_failure_summary
+29247270018,1,5289,CI,fix/20260612-0465,e917f487b4c65133d51e99e88832d57117547cc9,pull_request,1817,2026-07-13T11:43:59Z,2026-07-13T13:08:52Z,success,job_log_route_metric
+29253458057,1,5304,CI,docs/optimize-windows-runtime-performance,5aa88ba22f169ae7eb525addd3d3466afceb4058,pull_request,1864,2026-07-13T13:21:27Z,2026-07-13T13:21:28Z,skipped,inspected_ci
+29248058014,1,5290,CI,fix/20260617-0514,f8fb417f15879d6fe618b9cc556172140db791b5,pull_request,1638,2026-07-13T11:57:32Z,2026-07-13T13:28:09Z,success,job_log_failure_summary;job_log_route_metric
+29250135500,1,5294,CI,dev,9318f561ec1f9ddecef6b09c61afb2640013cb83,push,,2026-07-13T12:30:45Z,2026-07-13T13:42:53Z,success,job_log_route_metric
+29249849124,1,5293,CI,fix/quicklook-thumbnail-crash,b307926e774ceddf00df379543d331a1b74bf776,pull_request,1863,2026-07-13T12:26:14Z,2026-07-13T13:52:19Z,success,job_log_route_metric
+29250374899,1,5295,CI,fix/20260709-0728,b7fe77c60eaea57ff95f7e08322ad40e66c46183,pull_request,1813,2026-07-13T12:34:30Z,2026-07-13T14:04:08Z,success,job_log_failure_summary;job_log_route_metric
+29254095674,1,5305,CI,fix/20260709-0734,c2e541425f5a55904ede63b938a902a21934a984,pull_request,1831,2026-07-13T13:31:34Z,2026-07-13T14:27:30Z,cancelled,unavailable_job_log
+29250782593,1,5298,CI,fix/20260708-0721,2464ac8c3391a1f2ab41c7aa8cac495636a13399,pull_request,1809,2026-07-13T12:41:02Z,2026-07-13T14:36:00Z,success,job_log_route_metric
+29258270173,1,5313,CI,fix/20260617-0509,e15e662f86af1e6574c6706abbb135fff9597d9b,pull_request,1837,2026-07-13T14:30:55Z,2026-07-13T14:56:57Z,cancelled,unavailable_job_log
+29250769446,1,5297,CI,fix/20260706-0680,f6960c17dbc4e8a7bc7136b734db0e8bddbe30f4,pull_request,1799,2026-07-13T12:40:49Z,2026-07-13T14:59:12Z,success,job_log_route_metric
