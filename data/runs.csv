@@ -3546,7 +3546,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29082256079,1,5178,CI,dev,00a644bc168a23780c1e8d501e43471e49449dac,push,,2026-07-10T09:12:12Z,2026-07-10T09:12:37Z,cancelled,unavailable_job_log
 29082156839,1,5177,CI,dev,d89cd43ca71c1183901e690761827651b9a8fe51,push,,2026-07-10T09:10:24Z,2026-07-10T09:12:41Z,cancelled,unavailable_job_log
 29082278012,1,5179,CI,dev,cf7620cdd31006fff666c5250ee23736407208e1,push,,2026-07-10T09:12:36Z,2026-07-10T09:13:50Z,cancelled,unavailable_job_log
-29082330626,1,5180,CI,dev,01b1079eead81d9f6b97bdcca62a520be586d132,push,,2026-07-10T09:13:34Z,2026-07-10T09:14:58Z,cancelled,unavailable_job_log
+29082330626,1,5180,CI,dev,01b1079eead81d9f6b97bdcca62a520be586d132,push,,2026-07-10T09:13:34Z,2026-07-10T09:14:58Z,cancelled,artifact_json
 29082390219,1,5181,CI,dev,7552f72f1c9abf3faf760860e3a23694e631d143,push,,2026-07-10T09:14:38Z,2026-07-10T09:15:00Z,cancelled,unavailable_job_log
 29082409746,1,5182,CI,dev,cc14ec05d05582a9f6fdae6dd3297b3b6fbb6852,push,,2026-07-10T09:14:59Z,2026-07-10T09:17:13Z,cancelled,unavailable_job_log
 29082542869,1,5184,CI,dev,d1af1fe4eceb28c9bd43ae0d4ed675ac6d831692,push,,2026-07-10T09:17:16Z,2026-07-10T09:17:36Z,cancelled,unavailable_job_log
@@ -3613,5 +3613,9 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29199405886,1,5243,CI,codex/fix-e9001-auto-resume-runtime-anchor,e76818d2ec9346aab3d2c5084d774ba37e068afe,pull_request,1742,2026-07-12T16:03:38Z,2026-07-12T17:24:13Z,success,job_log_route_metric
 29220286265,1,5248,CI,fix/20260623-0560,11fe813047eac5c4f2c5e0b7cafa942906b35e01,pull_request,1851,2026-07-13T02:48:46Z,2026-07-13T03:45:37Z,success,job_log_route_metric
 29219968073,1,5244,CI,fix/20260708-0716,2d29efed0971066b8f70df752c037d6930895c7c,pull_request,1815,2026-07-13T02:39:34Z,2026-07-13T03:58:08Z,failure,job_log_route_metric
-29220017511,1,5246,CI,fix/20260618-0532,c1f2fb4a6de47e92fd9aa082b79cbfc1dabf4254,pull_request,1847,2026-07-13T02:41:00Z,2026-07-13T04:09:35Z,success,inspected_ci
-29219981818,1,5245,CI,fix/20260708-0725,87f1cbc0f312dd146d0675e9219e0fa7092f8dde,pull_request,1816,2026-07-13T02:39:59Z,2026-07-13T04:13:49Z,success,inspected_ci
+29220017511,1,5246,CI,fix/20260618-0532,c1f2fb4a6de47e92fd9aa082b79cbfc1dabf4254,pull_request,1847,2026-07-13T02:41:00Z,2026-07-13T04:09:35Z,success,job_log_failure_summary;job_log_route_metric
+29219981818,1,5245,CI,fix/20260708-0725,87f1cbc0f312dd146d0675e9219e0fa7092f8dde,pull_request,1816,2026-07-13T02:39:59Z,2026-07-13T04:13:49Z,success,job_log_failure_summary;job_log_route_metric
+29222517772,1,5258,CI,fix/20260630-0607,66522c7559d074ff4c496b63864c3845c1832d65,pull_request,1700,2026-07-13T03:49:40Z,2026-07-13T05:30:46Z,success,job_log_route_metric
+29221320376,1,5250,CI,fix/20260617-0515,634c4ff803680412715b9a659a7e38446c60c753,pull_request,1841,2026-07-13T03:15:55Z,2026-07-13T05:35:52Z,success,job_log_route_metric
+29221203435,1,5249,CI,fix/20260612-0466,493d942e6ef1b43de5def3e21a20f5815992aaea,pull_request,1818,2026-07-13T03:13:02Z,2026-07-13T05:38:10Z,success,job_log_route_metric
+29222085208,1,5255,CI,fix/20260630-0605,13a592dad548c013fce0fe2e57ce21d6166707ff,pull_request,1696,2026-07-13T03:37:21Z,2026-07-13T05:46:35Z,success,job_log_failure_summary;job_log_route_metric
