@@ -3611,3 +3611,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29188708198,1,5241,CI,codex/fix-e9001-auto-resume-runtime-anchor,9d3fea89e754b1a29576d69c214df5015795ae9f,pull_request,1742,2026-07-12T10:11:04Z,2026-07-12T11:25:46Z,failure,job_log_route_metric
 29194208829,1,5242,CI,codex/fix-e9001-auto-resume-runtime-anchor,f904d7b963baaae796e9c0a2afc40307f9c1fec9,pull_request,1742,2026-07-12T13:19:56Z,2026-07-12T13:46:24Z,failure,unavailable_job_log
 29199405886,1,5243,CI,codex/fix-e9001-auto-resume-runtime-anchor,e76818d2ec9346aab3d2c5084d774ba37e068afe,pull_request,1742,2026-07-12T16:03:38Z,2026-07-12T17:24:13Z,success,job_log_route_metric
+29220286265,1,5248,CI,fix/20260623-0560,11fe813047eac5c4f2c5e0b7cafa942906b35e01,pull_request,1851,2026-07-13T02:48:46Z,2026-07-13T03:45:37Z,success,job_log_route_metric
+29219968073,1,5244,CI,fix/20260708-0716,2d29efed0971066b8f70df752c037d6930895c7c,pull_request,1815,2026-07-13T02:39:34Z,2026-07-13T03:58:08Z,failure,job_log_route_metric
+29220017511,1,5246,CI,fix/20260618-0532,c1f2fb4a6de47e92fd9aa082b79cbfc1dabf4254,pull_request,1847,2026-07-13T02:41:00Z,2026-07-13T04:09:35Z,success,inspected_ci
+29219981818,1,5245,CI,fix/20260708-0725,87f1cbc0f312dd146d0675e9219e0fa7092f8dde,pull_request,1816,2026-07-13T02:39:59Z,2026-07-13T04:13:49Z,success,inspected_ci
