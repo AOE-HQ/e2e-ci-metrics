@@ -3703,7 +3703,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29278613032,1,5336,CI,fix/20260710-0748,b97fe7a22c0d8a54951bea60e0d7c984b403f3f9,pull_request,1874,2026-07-13T19:28:53Z,2026-07-13T20:23:55Z,cancelled,job_log_failure_summary
 29275798598,1,5331,CI,fix/agent-output-language,eb3c0d88bbfe7e7a2dc2365ebc415e6b82cedff9,pull_request,,2026-07-13T18:46:07Z,2026-07-13T20:43:36Z,success,job_log_route_metric
 29273326929,1,5326,CI,dev,bbb4b11ca7b003c3d3e915090af1eb8685455107,push,,2026-07-13T18:09:22Z,2026-07-13T20:43:56Z,cancelled,job_log_route_metric
-29268534116,1,5324,CI,feat/im-model-switch,88601f5e6b1c6829c0adb6c86b9098710add2839,pull_request,1870,2026-07-13T16:57:44Z,2026-07-13T20:46:30Z,success,job_log_route_metric
+29268534116,1,5324,CI,feat/im-model-switch,88601f5e6b1c6829c0adb6c86b9098710add2839,pull_request,,2026-07-13T16:57:44Z,2026-07-13T20:46:30Z,success,job_log_route_metric
 29284085981,1,5344,CI,feat/bundled-agent-toolchain,e1247bed0becb2b00f12f884e6f12a6f5a50284c,pull_request,1878,2026-07-13T20:51:52Z,2026-07-13T20:51:53Z,skipped,inspected_ci
 29276510011,1,5333,CI,fix/20260710-0747,38ffd5a0626a37d53eae5ede1e685a44ac6d516f,pull_request,1869,2026-07-13T18:56:41Z,2026-07-13T20:57:48Z,cancelled,unavailable_job_log
 29276170251,1,5332,CI,fix/20260629-0603,5153a6f626280d9134fb47a8199f2ba7440dcfef,pull_request,1721,2026-07-13T18:51:43Z,2026-07-13T20:58:17Z,success,job_log_route_metric
@@ -3758,5 +3758,13 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29314464472,1,5377,CI,fix/20260701-0637,c35188bd40e6d507cd1d2ffc290c2d309206fc3e,pull_request,1897,2026-07-14T07:24:40Z,2026-07-14T08:50:38Z,success,job_log_route_metric
 29317372918,1,5383,CI,fix/20260701-0631,b44219b34ef64950182c4b411a2a6c4b3ac7e428,pull_request,1894,2026-07-14T08:15:22Z,2026-07-14T09:07:00Z,cancelled,unavailable_job_log
 29320334311,1,5385,CI,fix/20260714-0784,d0c2001f13a1bb9603bb41d472191a8da2241ffa,pull_request,1901,2026-07-14T09:04:11Z,2026-07-14T09:07:01Z,cancelled,unavailable_job_log
-29316446399,1,5380,CI,fix/zhanxue,018c264713839e053cdc2014252dfcae4143ace9,pull_request,1899,2026-07-14T07:59:46Z,2026-07-14T09:25:09Z,success,inspected_ci
-29317040069,1,5382,CI,fix/20260713-0780,f37f813b2b34f7ef397bb58abfc9cb0483fa5859,pull_request,1900,2026-07-14T08:09:44Z,2026-07-14T09:40:33Z,success,inspected_ci
+29316446399,1,5380,CI,fix/zhanxue,018c264713839e053cdc2014252dfcae4143ace9,pull_request,,2026-07-14T07:59:46Z,2026-07-14T09:25:09Z,success,job_log_route_metric
+29317040069,1,5382,CI,fix/20260713-0780,f37f813b2b34f7ef397bb58abfc9cb0483fa5859,pull_request,1900,2026-07-14T08:09:44Z,2026-07-14T09:40:33Z,success,job_log_route_metric
+29319077841,1,5384,CI,dev,56be17169830c243da6e339236a36f1f2667b72b,push,,2026-07-14T08:43:54Z,2026-07-14T09:46:07Z,cancelled,job_log_route_metric
+29320494977,1,5387,CI,fix/20260714-0784,58611707944173e9c57179f09152732b4d7229dc,pull_request,1901,2026-07-14T09:06:42Z,2026-07-14T10:00:39Z,success,job_log_route_metric
+29322905948,1,5389,CI,dev,5787f474d125186551bee3b44764a38746304356,push,,2026-07-14T09:45:48Z,2026-07-14T10:08:07Z,cancelled,unavailable_job_log
+29320477435,1,5386,CI,fix/20260701-0631,fbc744aca4ca3ac2ff6fe62102ae45086e412629,pull_request,1894,2026-07-14T09:06:25Z,2026-07-14T10:29:33Z,success,job_log_route_metric
+29321386755,1,5388,CI,fix/20260713-0778,336aaaec66528a8b9d57f6e6854248de30715b5b,pull_request,1902,2026-07-14T09:20:58Z,2026-07-14T10:46:05Z,success,job_log_failure_summary;job_log_route_metric
+29324205400,1,5390,CI,feat/im-model-switch,6718fbb5aba8abb98b7505ee4a3410364f54eff4,pull_request,,2026-07-14T10:07:17Z,2026-07-14T11:31:16Z,success,job_log_failure_summary;job_log_route_metric
+29324222915,1,5391,CI,dev,9b0bc96008ddf6b34249d4f2a28b5cf3416d554a,push,,2026-07-14T10:07:35Z,2026-07-14T11:36:42Z,success,job_log_route_metric
+29327144090,1,5394,CI,fix/20260701-0634,959f753862a57faa648f4bc18f1ed7acd936c745,pull_request,1904,2026-07-14T10:56:40Z,2026-07-14T11:49:54Z,success,inspected_ci
