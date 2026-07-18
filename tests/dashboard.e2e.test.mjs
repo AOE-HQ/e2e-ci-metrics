@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { after, afterEach, before, test } from 'node:test';
 import { chromium } from 'playwright-core';
 import { HEADERS } from '../src/metrics-core.mjs';
+import { writeRouteResults } from '../src/route-results-store.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-metrics-dashboard-'));
@@ -63,6 +64,23 @@ test('dashboard build anchors rolling windows to its generated timestamp', () =>
       '7d': '2026-07-03T12:00:00.000Z',
       '1d': '2026-07-09T12:00:00.000Z',
     },
+  );
+});
+
+test('dashboard publishes a daily route-results index from the results navigation link', async () => {
+  const page = await browser.newPage();
+  await page.goto(baseUrl);
+
+  const resultsLink = page.getByRole('link', { name: 'results', exact: true });
+  assert.equal(await resultsLink.getAttribute('href'), 'data/route_results/index.json');
+
+  const index = JSON.parse(
+    readFileSync(path.join(fixtureRoot, 'dist', 'data', 'route_results', 'index.json'), 'utf8'),
+  );
+  assert.equal(index.schema_version, 1);
+  assert.deepEqual(
+    index.files.map((file) => file.date),
+    ['2026-05-31', '2026-06-25', '2026-07-07', '2026-07-09'],
   );
 });
 
@@ -535,7 +553,7 @@ function writeDashboardFixture(repoRoot) {
 
   writeCsv(path.join(dataDir, 'routes.csv'), HEADERS.routes, routes);
   writeCsv(path.join(dataDir, 'runs.csv'), HEADERS.runs, runs);
-  writeCsv(path.join(dataDir, 'route_results.csv'), HEADERS.routeResults, routeResults);
+  writeRouteResults({ repoRoot, rows: routeResults, runs });
   writeCsv(path.join(dataDir, 'route_stats.csv'), HEADERS.routeStats, stats);
   writeCsv(path.join(dataDir, 'route_platform_stats.csv'), HEADERS.routePlatformStats, platformStats);
 }

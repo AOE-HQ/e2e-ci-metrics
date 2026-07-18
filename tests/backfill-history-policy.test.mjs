@@ -38,8 +38,9 @@ describe('backfill history policy', () => {
   });
 
   it('retries only observations that can still improve on later daily summaries', () => {
-    assert.equal(isTerminalSource('artifact_json'), true);
+    assert.equal(isTerminalSource('artifact_json'), false);
     assert.equal(isTerminalSource('job_log_route_metric'), true);
+    assert.equal(isTerminalSource('job_log_failure_summary;job_log_route_metric'), false);
     assert.equal(isTerminalSource('job_log_failure_summary'), false);
     assert.equal(
       isTerminalSource('job_log_failure_summary', { isLatestAttempt: false }),
@@ -62,5 +63,12 @@ describe('backfill history policy', () => {
       /isTerminalSource\(\s*existingSource,\s*\{ isLatestAttempt: run\.isLatestAttempt \}\s*\)/s,
     );
     assert.match(source, /refreshSource && !String\(existingSource/);
+  });
+
+  it('writes raw batches without rebuilding aggregate tables until the backfill completes', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src', 'backfill-history.mjs'), 'utf8');
+
+    assert.match(source, /updateMetricsBatch\(\{\s*repoRoot,\s*updates: pendingUpdates,\s*recomputeAggregates: false/s);
+    assert.match(source, /flushPendingMetrics\(\);\s*recomputeAggregateTables\(\{ repoRoot \}\);/s);
   });
 });

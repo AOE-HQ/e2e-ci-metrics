@@ -196,7 +196,7 @@ test('a failed backfill leaves the persisted checkpoint unchanged', () => {
   }
 });
 
-test('a zero-exit backfill cannot advance past a run without persisted log data', () => {
+test('a zero-exit backfill advances past a completed run once its inspection row is persisted', () => {
   const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-unprocessed-'));
   const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
   mkdirSync(path.dirname(checkpointPath), { recursive: true });
@@ -214,23 +214,19 @@ test('a zero-exit backfill cannot advance past a run without persisted log data'
       loadRunSources: () => new Map([['101#1', 'inspected_ci']]),
     });
 
-    assert.equal(result.checkpointUpdated, false);
-    assert.equal(result.blockedBy.run_id, '101');
-    assert.deepEqual(JSON.parse(readFileSync(checkpointPath, 'utf8')), checkpoint);
+    assert.equal(result.checkpointUpdated, true);
+    assert.equal(result.blockedBy, null);
+    assert.equal(JSON.parse(readFileSync(checkpointPath, 'utf8')).processed_through.run_id, '101');
   } finally {
     rmSync(repoRoot, { recursive: true, force: true });
   }
 });
 
-test('artifact-only runs are explicitly retried for log data before the checkpoint advances', () => {
+test('artifact-only runs advance after one hourly backfill without a full-window refresh pass', () => {
   const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-artifact-'));
   const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
   mkdirSync(path.dirname(checkpointPath), { recursive: true });
   writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
-  const sourceSnapshots = [
-    new Map([['101#1', 'artifact_json']]),
-    new Map([['101#1', 'job_log_route_metric']]),
-  ];
   let backfillOptions;
 
   try {
@@ -241,13 +237,13 @@ test('artifact-only runs are explicitly retried for log data before the checkpoi
       checkpointPath,
       snapshotAt: '2026-07-10T12:00:00.000Z',
       listRuns: () => [workflowRun(100), workflowRun(101)],
-      loadRunSources: () => sourceSnapshots.shift(),
+      loadRunSources: () => new Map([['101#1', 'artifact_json']]),
       runBackfill: (options) => {
         backfillOptions = options;
       },
     });
 
-    assert.deepEqual(backfillOptions.refreshSources, ['artifact_json']);
+    assert.equal(Object.hasOwn(backfillOptions, 'refreshSources'), false);
     assert.equal(result.checkpointUpdated, true);
     assert.equal(result.nextCheckpoint.processed_through.run_id, '101');
   } finally {
@@ -255,15 +251,11 @@ test('artifact-only runs are explicitly retried for log data before the checkpoi
   }
 });
 
-test('mixed complete and partial log sources retry the partial source before advancing', () => {
+test('mixed complete and partial log sources advance after one hourly backfill', () => {
   const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-partial-'));
   const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
   mkdirSync(path.dirname(checkpointPath), { recursive: true });
   writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
-  const sourceSnapshots = [
-    new Map([['101#1', 'job_log_failure_summary;job_log_route_metric']]),
-    new Map([['101#1', 'job_log_route_metric']]),
-  ];
   let backfillOptions;
 
   try {
@@ -274,20 +266,20 @@ test('mixed complete and partial log sources retry the partial source before adv
       checkpointPath,
       snapshotAt: '2026-07-10T12:00:00.000Z',
       listRuns: () => [workflowRun(100), workflowRun(101)],
-      loadRunSources: () => sourceSnapshots.shift(),
+      loadRunSources: () => new Map([['101#1', 'job_log_failure_summary;job_log_route_metric']]),
       runBackfill: (options) => {
         backfillOptions = options;
       },
     });
 
-    assert.deepEqual(backfillOptions.refreshSources, ['job_log_failure_summary']);
+    assert.equal(Object.hasOwn(backfillOptions, 'refreshSources'), false);
     assert.equal(result.checkpointUpdated, true);
   } finally {
     rmSync(repoRoot, { recursive: true, force: true });
   }
 });
 
-test('unavailable log markers are retried and cannot advance the checkpoint by themselves', () => {
+test('unavailable log markers remain explicit but no longer block the checkpoint', () => {
   const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-unavailable-'));
   const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
   mkdirSync(path.dirname(checkpointPath), { recursive: true });
@@ -308,15 +300,15 @@ test('unavailable log markers are retried and cannot advance the checkpoint by t
       },
     });
 
-    assert.deepEqual(backfillOptions.refreshSources, ['unavailable_job_log']);
-    assert.equal(result.checkpointUpdated, false);
-    assert.equal(result.blockedBy.run_id, '101');
+    assert.equal(Object.hasOwn(backfillOptions, 'refreshSources'), false);
+    assert.equal(result.checkpointUpdated, true);
+    assert.equal(result.blockedBy, null);
   } finally {
     rmSync(repoRoot, { recursive: true, force: true });
   }
 });
 
-test('a run missing a complete expected platform is refreshed and remains a checkpoint barrier', () => {
+test('a run missing an expected platform remains partial without blocking newer runs', () => {
   const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-platform-'));
   const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
   mkdirSync(path.dirname(checkpointPath), { recursive: true });
@@ -341,15 +333,15 @@ test('a run missing a complete expected platform is refreshed and remains a chec
       },
     });
 
-    assert.deepEqual(backfillOptions.refreshSources, ['job_log_route_metric']);
-    assert.equal(result.checkpointUpdated, false);
-    assert.equal(result.blockedBy.run_id, '101');
+    assert.equal(Object.hasOwn(backfillOptions, 'refreshSources'), false);
+    assert.equal(result.checkpointUpdated, true);
+    assert.equal(result.blockedBy, null);
   } finally {
     rmSync(repoRoot, { recursive: true, force: true });
   }
 });
 
-test('the public updater derives expected-platform completeness from persisted CSV rows', () => {
+test('the public updater advances from the persisted runs table without reading route-result history', () => {
   const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-csv-'));
   const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
   const dataDir = path.join(repoRoot, 'data');
@@ -362,16 +354,6 @@ test('the public updater derives expected-platform completeness from persisted C
       { run_id: '101', run_attempt: '1', data_source: 'job_log_route_metric' },
     ]),
   );
-  const macosRow = {
-    run_id: '101',
-    run_attempt: '1',
-    route_id: 'route-a',
-    platform: 'macos',
-    outcome: 'passed',
-    data_source: 'job_log_route_metric',
-  };
-  const windowsRow = { ...macosRow, platform: 'windows' };
-  writeFileSync(path.join(dataDir, 'route_results.csv'), stringifyCsv(HEADERS.routeResults, [macosRow]));
   let backfillOptions;
 
   try {
@@ -384,14 +366,10 @@ test('the public updater derives expected-platform completeness from persisted C
       listRuns: () => [workflowRun(100), workflowRun(101)],
       runBackfill: (options) => {
         backfillOptions = options;
-        writeFileSync(
-          path.join(dataDir, 'route_results.csv'),
-          stringifyCsv(HEADERS.routeResults, [macosRow, windowsRow]),
-        );
       },
     });
 
-    assert.deepEqual(backfillOptions.refreshSources, ['job_log_route_metric']);
+    assert.equal(Object.hasOwn(backfillOptions, 'refreshSources'), false);
     assert.equal(result.checkpointUpdated, true);
     assert.equal(result.nextCheckpoint.processed_through.run_id, '101');
   } finally {
@@ -410,6 +388,9 @@ test('the hourly workflow is a single serialized writer and explicitly redeploys
   assert.match(workflow, /secrets\.AOE_DESKTOP_READ_TOKEN/);
   assert.match(workflow, /--checkpoint state\/aoe-desktop-ci-checkpoint\.json/);
   assert.match(workflow, /state\/aoe-desktop-ci-checkpoint\.json/);
+  assert.match(workflow, /data\/route_results\//);
+  assert.doesNotMatch(workflow, /data\/route_results\.csv/);
+  assert.match(workflow, /check-data-file-sizes\.mjs --root data --max-mib 95/);
   assert.match(workflow, /gh workflow run pages\.yml/);
   assert.doesNotMatch(workflow, /tests\/pr-number-preservation\.test\.mjs/);
   assert.doesNotMatch(workflow, /tests\/route-failure-history\.test\.mjs/);

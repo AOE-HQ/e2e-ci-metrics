@@ -72,6 +72,9 @@ jobs:
             --retries 3 \
             --quiet-skips
 
+      - name: Verify data file sizes
+        run: pnpm exec node src/check-data-file-sizes.mjs --root data --max-mib 95
+
       - name: Commit daily summary when data changed
         shell: bash
         run: |

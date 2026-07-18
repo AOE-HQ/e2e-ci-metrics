@@ -30,7 +30,11 @@
 | `conclusion` | Overall test conclusion as reported by AoE Desktop CI. |
 | `data_source` | Semicolon-separated metric sources used for this run: `job_log_route_metric` for footer-verified full log outcomes, `job_log_failure_summary` for legacy partial log signals, `inspected_ci`, or `unavailable_job_log`. `artifact_json` is retained only as a legacy route-catalog marker. |
 
-## `data/route_results.csv`
+## `data/route_results/YYYY-MM-DD.csv`
+
+Route-result rows are partitioned by the UTC date of the corresponding run's
+`started_at` timestamp. Every shard has the same columns. The dashboard
+publishes `data/route_results/index.json` as the shard manifest.
 
 | Column | Description |
 | --- | --- |

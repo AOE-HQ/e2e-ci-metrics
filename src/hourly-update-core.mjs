@@ -2,16 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  ARTIFACT_JSON_SOURCE,
-  HEADERS,
-  JOB_LOG_FAILURE_SOURCE,
-  JOB_LOG_ROUTE_METRIC_SOURCE,
-  readTable,
-} from './metrics-core.mjs';
+import { HEADERS, readTable } from './metrics-core.mjs';
 
 const DEFAULT_PAGE_SIZE = 100;
-const UNAVAILABLE_JOB_LOG_SOURCE = 'unavailable_job_log';
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export function listWorkflowRunsFromCheckpoint({
@@ -127,7 +120,6 @@ export function runHourlyUpdate({
     return { ...plan, checkpointUpdated: false, dryRun: true };
   }
 
-  const sourcesBefore = plan.needsBackfill ? loadRunSources({ repoRoot }) : new Map();
   if (plan.needsBackfill) {
     runBackfill({
       repository,
@@ -136,11 +128,6 @@ export function runHourlyUpdate({
       since: plan.since,
       until: plan.until,
       retries,
-      refreshSources: collectRefreshSources(
-        plan.runKeysToSync,
-        sourcesBefore,
-        checkpoint.expected_platforms,
-      ),
     });
   }
 
@@ -151,7 +138,7 @@ export function runHourlyUpdate({
         runs,
         snapshotAt,
         isRunProcessed: (run) =>
-          isPersistedLogRun(runSources.get(runKey(run)), checkpoint.expected_platforms),
+          isPersistedRun(runSources.get(runKey(run))),
       })
     : plan;
   const checkpointUpdated = JSON.stringify(persistedPlan.nextCheckpoint) !== JSON.stringify(checkpoint);
@@ -233,72 +220,16 @@ function runKey(run) {
   return `${run.run_id}#${run.run_attempt || 1}`;
 }
 
-function isPersistedLogRun(value, expectedPlatforms) {
+function isPersistedRun(value) {
   const state = normalizeRunSourceState(value);
-  const sources = new Set(state.source.split(';').filter(Boolean));
-  if (sources.size !== 1 || !sources.has(JOB_LOG_ROUTE_METRIC_SOURCE)) {
-    return false;
-  }
-  if (state.completePlatforms === null) {
-    return true;
-  }
-  return expectedPlatforms.every((platform) => state.completePlatforms.has(platform));
+  return state.source.trim() !== '';
 }
 
 function readRunSources({ repoRoot }) {
   const runs = readTable(path.join(repoRoot, 'data', 'runs.csv'), HEADERS.runs);
-  const routeResults = readTable(path.join(repoRoot, 'data', 'route_results.csv'), HEADERS.routeResults);
-  const platformSourcesByRun = new Map();
-
-  for (const row of routeResults) {
-    const key = `${row.run_id}#${row.run_attempt || '1'}`;
-    if (!platformSourcesByRun.has(key)) {
-      platformSourcesByRun.set(key, new Map());
-    }
-    const byPlatform = platformSourcesByRun.get(key);
-    if (!byPlatform.has(row.platform)) {
-      byPlatform.set(row.platform, new Set());
-    }
-    byPlatform.get(row.platform).add(row.data_source);
-  }
-
   return new Map(
-    runs.map((row) => {
-      const key = `${row.run_id}#${row.run_attempt || '1'}`;
-      const byPlatform = platformSourcesByRun.get(key) ?? new Map();
-      const completePlatforms = [...byPlatform.entries()]
-        .filter(([, sources]) => sources.size === 1 && sources.has(JOB_LOG_ROUTE_METRIC_SOURCE))
-        .map(([platform]) => platform);
-      return [key, { source: row.data_source, complete_platforms: completePlatforms }];
-    }),
+    runs.map((row) => [`${row.run_id}#${row.run_attempt || '1'}`, row.data_source]),
   );
-}
-
-function collectRefreshSources(runKeys, runSources, expectedPlatforms) {
-  const refreshable = new Set([
-    ARTIFACT_JSON_SOURCE,
-    JOB_LOG_FAILURE_SOURCE,
-    UNAVAILABLE_JOB_LOG_SOURCE,
-  ]);
-  const selected = new Set();
-  for (const key of runKeys) {
-    const state = normalizeRunSourceState(runSources.get(key));
-    const sources = state.source.split(';');
-    if (
-      sources.length === 1 &&
-      sources[0] === JOB_LOG_ROUTE_METRIC_SOURCE &&
-      state.completePlatforms !== null &&
-      expectedPlatforms.some((platform) => !state.completePlatforms.has(platform))
-    ) {
-      selected.add(JOB_LOG_ROUTE_METRIC_SOURCE);
-    }
-    for (const source of sources) {
-      if (refreshable.has(source)) {
-        selected.add(source);
-      }
-    }
-  }
-  return [...selected].sort();
 }
 
 function normalizeRunSourceState(value) {
@@ -331,14 +262,11 @@ function validateProcessedThrough(cursor) {
   }
 }
 
-function executeBackfill({ repository, workflow, repoRoot, since, until, retries, refreshSources = [] }) {
+function executeBackfill({ repository, workflow, repoRoot, since, until, retries }) {
   executeBackfillCommand({ repository, workflow, repoRoot, since, until, retries });
-  for (const refreshSource of refreshSources) {
-    executeBackfillCommand({ repository, workflow, repoRoot, since, until, retries, refreshSource });
-  }
 }
 
-function executeBackfillCommand({ repository, workflow, repoRoot, since, until, retries, refreshSource = '' }) {
+function executeBackfillCommand({ repository, workflow, repoRoot, since, until, retries }) {
   const args = [
     path.join(moduleDirectory, 'backfill-history.mjs'),
     '--repo',
@@ -355,9 +283,6 @@ function executeBackfillCommand({ repository, workflow, repoRoot, since, until, 
     String(retries),
     '--quiet-skips',
   ];
-  if (refreshSource) {
-    args.push('--refresh-source', refreshSource);
-  }
   execFileSync(
     process.execPath,
     args,

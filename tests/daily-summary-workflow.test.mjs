@@ -26,16 +26,19 @@ describe('daily summary workflow contract', () => {
     assert.match(source, /--repo AOE-HQ\/aoe-desktop/);
     assert.match(source, /--workflow ci\.yml/);
     assert.match(source, /--since/);
+    assert.match(source, /check-data-file-sizes\.mjs --root data --max-mib 95/);
     assert.match(source, /git diff --quiet -- data/);
     assert.match(source, /git add -- data/);
     assert.equal((source.match(/git commit/g) ?? []).length, 1);
     assert.match(source, /git push origin HEAD:main/);
 
     const backfillIndex = source.indexOf('pnpm backfill --');
+    const sizeGuardIndex = source.indexOf('check-data-file-sizes.mjs');
     const diffIndex = source.indexOf('git diff --quiet -- data');
     const commitIndex = source.indexOf('git commit');
     const pushIndex = source.indexOf('git push origin HEAD:main');
-    assert.ok(backfillIndex < diffIndex);
+    assert.ok(backfillIndex < sizeGuardIndex);
+    assert.ok(sizeGuardIndex < diffIndex);
     assert.ok(diffIndex < commitIndex);
     assert.ok(commitIndex < pushIndex);
   });

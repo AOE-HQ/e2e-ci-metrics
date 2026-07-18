@@ -10,12 +10,18 @@ The checkpoint contains `run_id`, `run_number`, and `run_attempt`. Its
 not treated as the cursor. If an earlier run is still queued or in progress,
 later completed runs may be imported, but the checkpoint does not advance past
 the unfinished run. The next hourly update therefore sees that boundary again.
-After backfill exits, the updater also checks `data/runs.csv`: only a pure,
-complete `job_log_route_metric` observation for every platform listed in
-`expected_platforms` can advance the checkpoint.
-Artifact-only, legacy partial, mixed-source, and `unavailable_job_log` rows are
-retried through the log collector and remain a barrier until a complete log
-observation is persisted.
+After a successful backfill, any completed run recorded in `data/runs.csv` can
+advance the checkpoint. Artifact-only, legacy partial, mixed-source, and
+`unavailable_job_log` rows remain explicit partial observations, but no longer
+hold all newer data behind them. The bounded daily summary retries recent
+partial observations; older recovery remains available through a bounded
+manual `--refresh-source` run.
+
+Route-result details are stored in `data/route_results/YYYY-MM-DD.csv`. A
+normal update rewrites only affected UTC-day shards, while a historical
+backfill rebuilds aggregate tables once after all raw batches are persisted.
+The hourly workflow also rejects any file under `data/` larger than 95 MiB
+before attempting a Git push.
 
 The workflow requires the repository secret `AOE_DESKTOP_READ_TOKEN`. It must
 be able to read Actions runs, jobs, artifacts, and logs from the private

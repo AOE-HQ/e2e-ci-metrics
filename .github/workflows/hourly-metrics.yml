@@ -54,6 +54,9 @@ jobs:
           tests/hourly-update.test.mjs
           tests/metrics-core.test.mjs
 
+      - name: Verify data file sizes
+        run: pnpm exec node src/check-data-file-sizes.mjs --root data --max-mib 95
+
       - name: Build dashboard
         run: pnpm build:pages
 
@@ -66,7 +69,7 @@ jobs:
           git add -- \
             data/routes.csv \
             data/runs.csv \
-            data/route_results.csv \
+            data/route_results/ \
             data/route_stats.csv \
             data/route_platform_stats.csv \
             state/aoe-desktop-ci-checkpoint.json

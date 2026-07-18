@@ -59,3 +59,9 @@
 - 仓库含数十 MB CSV blob 时，普通 `git fetch` 或 partial clone 的 lazy fetch 可能长时间无进展、`early EOF`，默认 rebase 还会为 cherry-pick 去重扫描所有上游数据快照。先用 `--filter=blob:none` 获取提交和树，必要时从 codeload ZIP 补齐当前目标树并用 `git hash-object` 对照 tree SHA 校验，再使用 `git rebase --reapply-cherry-picks` 避免读取无关的中间大 blob；大对象下载不得在未校验 SHA 的情况下写入对象库。
 - 仅安装 `playwright-core` 时，可执行 CLI 名称是 `playwright-core`，不是 `playwright`。CI 安装浏览器应使用 `pnpm exec playwright-core install --with-deps chromium`；否则会报 `Command "playwright" not found`。
 - 本仓库的小时 writer 可能在本地验证或多次推送之间推进 `main`。每次 push 前都用远端 SHA 对照本地 `HEAD^`；不一致时拒绝推送、fetch 新提交并 rebase，绝不能为了抢过自动数据提交而 force push。
+- 在 `functions.exec` 的并行只读诊断中也必须逐条遵守 PowerShell/`rg` 的退出码与语法避坑规则：`foreach (...) { ... }` 的结果先赋给变量再接管道；用于确认“无匹配”的 `rg` 必须显式接受 exit code 1。并行包装不会替这些子命令归一化失败。
+- 用显式 SSH URL 执行 `git fetch --filter=blob:none` 只会取得提交/树，并不会把现有 `origin` 的 promisor/lazy-fetch URL 改成 SSH；随后 checkout/merge 缺失 blob 时仍可能走 HTTPS 并报 443。HTTPS 不稳定时，合并前先通过经 SHA 校验的 codeload/SSH 路径补齐目标树所需 blob，不要假设前一次 SSH fetch 已覆盖 checkout。
+- 跨多个文件的 `apply_patch` 只要任一文件上下文不匹配，整次补丁都可能不落盘。文档或脏工作区修改应先逐文件重读目标片段，再按文件拆成小补丁应用和验证。
+- 处理数十万行数组时不要使用 `target.push(...largeArray)` 或其他大规模参数展开；V8 会因参数数量过大触发 `Maximum call stack size exceeded`。改用逐项循环、固定大小分块或流式累计。
+- 核对百 MB 级 CSV 时不要同时把旧文件和全部分片 `parseCsv` 成对象数组；对象膨胀可能超过 1.5 GB heap 并 OOM。优先使用流式行数/哈希校验、逐分片处理或外部排序，仅在受控小窗口内对象化。
+- 核对百 MB 级 CSV 时不要用 `parseCsv` 一次性对象化整文件，即使提高 Node heap 也可能 OOM；应使用 Python `csv.reader` 等流式读取。读取 `subprocess.Popen(..., stdout=PIPE)` 的 CSV 时，`Popen` 本身不支持 `newline` 参数，应保持二进制管道并用 `io.TextIOWrapper(stdout, encoding='utf-8', newline='')` 包装。

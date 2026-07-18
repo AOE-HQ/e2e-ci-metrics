@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { after, afterEach, before, test } from 'node:test';
 import { chromium } from 'playwright-core';
 import { HEADERS } from '../src/metrics-core.mjs';
+import { writeRouteResults } from '../src/route-results-store.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-route-failures-'));
@@ -142,7 +143,7 @@ function writeFixture(repoRoot) {
 
   writeCsv(path.join(dataDir, 'routes.csv'), HEADERS.routes, [route]);
   writeCsv(path.join(dataDir, 'runs.csv'), HEADERS.runs, runs);
-  writeCsv(path.join(dataDir, 'route_results.csv'), HEADERS.routeResults, results);
+  writeRouteResults({ repoRoot, rows: results, runs });
   writeCsv(path.join(dataDir, 'route_stats.csv'), HEADERS.routeStats, [stat]);
   writeCsv(path.join(dataDir, 'route_platform_stats.csv'), HEADERS.routePlatformStats, platformStats);
 }

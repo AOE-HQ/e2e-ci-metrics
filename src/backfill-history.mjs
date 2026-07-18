@@ -9,6 +9,7 @@ import {
   extractRouteResultsFromReport,
   extractRouteResultsFromJobLog,
   readTable,
+  recomputeAggregateTables,
   updateMetricsBatch,
   writeTable,
 } from './metrics-core.mjs';
@@ -186,6 +187,7 @@ for (const run of runs) {
 }
 
 flushPendingMetrics();
+recomputeAggregateTables({ repoRoot });
 
 console.log(
   `Backfill summary: inspected=${summary.inspected}, imported=${summary.imported}, reports=${summary.reports}, logResults=${summary.logResults}, skippedExisting=${summary.skippedExisting}, skippedNoArtifact=${summary.skippedNoArtifact}, skippedNoReport=${summary.skippedNoReport}, skippedNoSignal=${summary.skippedNoSignal}, artifactFailures=${summary.artifactFailures}, logFailures=${summary.logFailures}`,
@@ -203,7 +205,11 @@ function flushPendingMetrics() {
     return;
   }
   console.log(`Writing ${pendingUpdates.length} imported run(s) as one metrics batch.`);
-  updateMetricsBatch({ repoRoot, updates: pendingUpdates });
+  updateMetricsBatch({
+    repoRoot,
+    updates: pendingUpdates,
+    recomputeAggregates: false,
+  });
   pendingUpdates.length = 0;
 }
 

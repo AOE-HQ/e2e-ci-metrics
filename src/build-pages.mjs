@@ -4,6 +4,7 @@ import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'no
 import path from 'node:path';
 import { HEADERS, computeWindowedMetrics, readTable } from './metrics-core.mjs';
 import { buildRouteFailureHistory } from './route-failure-history.mjs';
+import { listRouteResultShardFiles, readRouteResults } from './route-results-store.mjs';
 
 const repoRoot = process.cwd();
 const distDir = path.join(repoRoot, 'dist');
@@ -16,7 +17,7 @@ const TIME_WINDOWS = [
   { key: '1d', label: 'Last 24 hours', durationMs: DAY_MS },
 ];
 
-const csvFiles = ['routes.csv', 'runs.csv', 'route_results.csv', 'route_stats.csv', 'route_platform_stats.csv'];
+const csvFiles = ['routes.csv', 'runs.csv', 'route_stats.csv', 'route_platform_stats.csv'];
 const generatedAt = resolveBuildTime();
 
 rmSync(distDir, { recursive: true, force: true });
@@ -25,6 +26,7 @@ mkdirSync(distDataDir, { recursive: true });
 for (const fileName of csvFiles) {
   copyFileSync(path.join(dataDir, fileName), path.join(distDataDir, fileName));
 }
+const routeResultsManifest = copyRouteResultShards();
 
 const sourceData = readSourceData();
 const timeWindows = buildTimeWindowData(generatedAt, sourceData);
@@ -34,7 +36,7 @@ writeFileSync(path.join(distDir, '.nojekyll'), '');
 writeFileSync(
   path.join(distDir, 'manifest.json'),
   `${JSON.stringify(
-    buildManifest(generatedAt, timeWindows, failureHistoryManifest),
+    buildManifest(generatedAt, timeWindows, failureHistoryManifest, routeResultsManifest),
     null,
     2,
   )}\n`,
@@ -54,7 +56,34 @@ function readSourceData() {
   return {
     routes: readTable(path.join(dataDir, 'routes.csv'), HEADERS.routes),
     runs: readTable(path.join(dataDir, 'runs.csv'), HEADERS.runs),
-    routeResults: readTable(path.join(dataDir, 'route_results.csv'), HEADERS.routeResults),
+    routeResults: readRouteResults({ repoRoot }),
+  };
+}
+
+function copyRouteResultShards() {
+  const outputDirectory = path.join(distDataDir, 'route_results');
+  const files = [];
+  mkdirSync(outputDirectory, { recursive: true });
+
+  for (const sourcePath of listRouteResultShardFiles({ repoRoot })) {
+    const fileName = path.basename(sourcePath);
+    const content = readFileSync(sourcePath, 'utf8');
+    const lineCount = content.trim() ? content.trimEnd().split(/\r?\n/).length : 0;
+    copyFileSync(sourcePath, path.join(outputDirectory, fileName));
+    files.push({
+      date: path.basename(fileName, '.csv'),
+      path: `data/route_results/${fileName}`,
+      data_rows: Math.max(0, lineCount - 1),
+      size_bytes: Buffer.byteLength(content),
+    });
+  }
+
+  const index = { schema_version: 1, files };
+  writeFileSync(path.join(outputDirectory, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);
+  return {
+    index_file: 'data/route_results/index.json',
+    shard_count: files.length,
+    data_rows: files.reduce((total, file) => total + file.data_rows, 0),
   };
 }
 
@@ -89,7 +118,7 @@ function buildTimeWindowData(asOf, { routes, runs, routeResults }) {
   };
 }
 
-function buildManifest(generatedAt, timeWindows, failureHistory) {
+function buildManifest(generatedAt, timeWindows, failureHistory, routeResults) {
   const files = Object.fromEntries(
     csvFiles.map((fileName) => {
       const content = readFileSync(path.join(dataDir, fileName), 'utf8');
@@ -100,7 +129,7 @@ function buildManifest(generatedAt, timeWindows, failureHistory) {
 
   return {
     generated_at: generatedAt,
-    files,
+    files: { ...files, route_results: routeResults },
     time_windows: timeWindows,
     failure_history: failureHistory,
   };
@@ -1139,7 +1168,7 @@ function buildIndexHtml() {
         <nav class="actions" aria-label="CSV downloads">
           <a class="button" href="data/routes.csv">routes</a>
           <a class="button" href="data/runs.csv">runs</a>
-          <a class="button" href="data/route_results.csv">results</a>
+          <a class="button" href="data/route_results/index.json">results</a>
           <a class="button" href="data/route_stats.csv">route stats</a>
           <a class="button" href="data/route_platform_stats.csv">platform stats</a>
         </nav>
