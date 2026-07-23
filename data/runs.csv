@@ -4325,3 +4325,10 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29981343030,1,5884,CI,fix/e2e-runner-failure-propagation,175f8f994ba334412d01440dff22f223df311992,pull_request,2007,2026-07-23T05:08:14Z,2026-07-23T05:12:39Z,cancelled,unavailable_job_log
 29977948084,1,5876,CI,dev,e8c02ae0749d8b3986faf5477a6379abc3915f6d,push,,2026-07-23T03:48:55Z,2026-07-23T05:28:57Z,failure,job_log_failure_summary
 29977761262,1,5873,CI,fix/20260710-0744,e15dff3e9de43a2e9b554fce09505c45ad979a08,pull_request,1910,2026-07-23T03:44:24Z,2026-07-23T05:30:28Z,success,job_log_failure_summary
+29978401679,1,5879,CI,fix/ci-windows-cleanup-race,b48f3c6c6406500faa7a72c33f4cebed53d8d8e5,pull_request,2006,2026-07-23T03:59:55Z,2026-07-23T05:47:05Z,success,job_log_failure_summary;job_log_route_metric
+29979220039,1,5882,CI,test/long-chat-5000-characterization,594517e8b92dc13d23d6615327eca24093da3b2e,pull_request,1960,2026-07-23T04:18:28Z,2026-07-23T06:10:07Z,failure,job_log_failure_summary
+29978887821,1,5880,CI,fix/20260720-0860,5ea22f6241e38cbb9962c680a1c992999dad9a2e,pull_request,1992,2026-07-23T04:10:53Z,2026-07-23T06:16:43Z,success,job_log_failure_summary;job_log_route_metric
+29979220039,2,5882,CI,test/long-chat-5000-characterization,594517e8b92dc13d23d6615327eca24093da3b2e,pull_request,1960,2026-07-23T06:21:56Z,2026-07-23T06:24:20Z,cancelled,job_log_failure_summary
+29981531811,1,5885,CI,fix/e2e-runner-failure-propagation,fcdc0f7f66d49ad6a4bff92dc6af256398c1cd60,pull_request,2007,2026-07-23T05:12:26Z,2026-07-23T06:25:34Z,failure,unavailable_job_log
+29979163347,1,5881,CI,fix/20260723-0904,bc456cfa41639ccc5ad861124d768f8c87a49f19,pull_request,2000,2026-07-23T04:17:04Z,2026-07-23T06:33:54Z,success,job_log_failure_summary;job_log_route_metric
+29984921117,1,5886,CI,test/long-chat-5000-characterization,06d7368d9f6b5981435d99f714cd837f7b5fe114,pull_request,1960,2026-07-23T06:24:07Z,2026-07-23T06:35:48Z,cancelled,unavailable_job_log
