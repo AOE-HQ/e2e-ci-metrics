@@ -57,7 +57,8 @@ are unavailable.
 
 - `data/routes.csv`: stable E2E route identity and module tags.
 - `data/runs.csv`: GitHub Actions run metadata.
-- `data/route_results.csv`: per-run, per-platform route results.
+- `data/route_results/YYYY-MM-DD.csv`: per-run, per-platform route results,
+  partitioned by the run's UTC start date.
 - `data/route_stats.csv`: aggregated route statistics.
 - `data/route_platform_stats.csv`: per-route, per-platform aggregate
   statistics.
@@ -153,13 +154,15 @@ the same backfill path with a bounded recent window; wider historical scans and
 source migrations remain manual.
 
 The updater is idempotent by `run_id` and `run_attempt`: rerunning the same CI
-attempt replaces that attempt's rows, then recomputes aggregate CSV files from
-the full `route_results.csv`. It does not delete other historical runs.
+attempt replaces that attempt's rows in its daily shard. Normal single-run
+updates recompute aggregate CSV files across all shards; historical backfill
+defers that aggregate recomputation until all raw batches have been written.
+It does not delete other historical runs.
 
 Backfill automatically splits large created-date ranges before listing workflow
 runs because GitHub caps a single Actions run search window at 1000 results.
-GitHub API and log downloads are retried. Imported runs are written in batches
-so a bounded refresh does not repeatedly rewrite the entire CSV dataset. Each
-run attempt is inspected independently; temporary log failures, artifact-only
-fallbacks, and unavailable logs remain retryable until complete outcomes are
-persisted.
+GitHub API and log downloads are retried. Imported runs are written in batches,
+and only affected daily shards are replaced. Each run attempt is inspected
+independently; temporary log failures, artifact-only fallbacks, and unavailable
+logs remain explicit partial observations and are retried by bounded recent or
+manual refreshes without blocking the hourly checkpoint.

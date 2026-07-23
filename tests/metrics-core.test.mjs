@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,10 +11,12 @@ import {
   extractRouteResultsFromJobLog,
   extractRouteResultsFromReport,
   readTable,
+  recomputeAggregateTables,
   stringifyCsv,
   updateMetrics,
   updateMetricsBatch,
 } from '../src/metrics-core.mjs';
+import { readRouteResults } from '../src/route-results-store.mjs';
 
 describe('E2E CI metrics core', () => {
   it('derives route id from spec file and full title path', () => {
@@ -73,7 +75,7 @@ describe('E2E CI metrics core', () => {
       artifactUrl: 'https://github.com/AOE-HQ/aoe-desktop/actions/runs/123',
     });
 
-    const results = readTable(path.join(repo, 'data', 'route_results.csv'), HEADERS.routeResults);
+    const results = readRouteResults({ repoRoot: repo });
     const stats = readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats);
     const platformStats = readTable(
       path.join(repo, 'data', 'route_platform_stats.csv'),
@@ -508,7 +510,7 @@ describe('E2E CI metrics core', () => {
     });
 
     assert.equal(readTable(path.join(repo, 'data', 'routes.csv'), HEADERS.routes).length, 1);
-    assert.equal(readTable(path.join(repo, 'data', 'route_results.csv'), HEADERS.routeResults).length, 1);
+    assert.equal(readRouteResults({ repoRoot: repo }).length, 1);
     assert.deepEqual(readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats), []);
     assert.deepEqual(
       readTable(path.join(repo, 'data', 'route_platform_stats.csv'), HEADERS.routePlatformStats),
@@ -548,7 +550,7 @@ describe('E2E CI metrics core', () => {
     });
 
     const runs = readTable(path.join(repo, 'data', 'runs.csv'), HEADERS.runs);
-    const results = readTable(path.join(repo, 'data', 'route_results.csv'), HEADERS.routeResults);
+    const results = readRouteResults({ repoRoot: repo });
     const stats = readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats);
     assert.equal(runs.length, 2);
     assert.equal(results.length, 2);
@@ -558,6 +560,112 @@ describe('E2E CI metrics core', () => {
       pass_rate: '0.5000',
       last_outcome: 'failed',
     });
+  });
+
+  it('stores route results in UTC daily shards behind one read interface', () => {
+    const repo = createTempRepo();
+    const passed = extractRouteResultsFromJobLog(routeMetricLogLine({ outcome: 'passed' }), {
+      platform: 'macos',
+    });
+
+    updateMetricsBatch({
+      repoRoot: repo,
+      updates: [
+        {
+          reports: [],
+          results: passed,
+          run: { ...baseRun(), run_id: 'day-one' },
+        },
+        {
+          reports: [],
+          results: passed,
+          run: {
+            ...baseRun(),
+            run_id: 'day-two',
+            started_at: '2026-07-08T00:30:00.000Z',
+            completed_at: '2026-07-08T01:00:00.000Z',
+          },
+        },
+      ],
+    });
+
+    assert.deepEqual(readdirSync(path.join(repo, 'data', 'route_results')), [
+      '2026-07-07.csv',
+      '2026-07-08.csv',
+    ]);
+    assert.equal(existsSync(path.join(repo, 'data', 'route_results.csv')), false);
+    assert.deepEqual(
+      readRouteResults({ repoRoot: repo }).map((row) => row.run_id),
+      ['day-one', 'day-two'],
+    );
+  });
+
+  it('keeps the complete legacy file authoritative until a shard migration finishes', () => {
+    const repo = createTempRepo();
+    const dataDir = path.join(repo, 'data');
+    const legacyRow = { run_id: 'legacy', run_attempt: '1', platform: 'macos', route_id: 'legacy-route' };
+    const partialRow = { run_id: 'partial', run_attempt: '1', platform: 'macos', route_id: 'partial-route' };
+    mkdirSync(path.join(dataDir, 'route_results'), { recursive: true });
+    writeFileSync(
+      path.join(dataDir, 'route_results.csv'),
+      stringifyCsv(HEADERS.routeResults, [legacyRow]),
+    );
+    writeFileSync(
+      path.join(dataDir, 'route_results', '2026-07-07.csv'),
+      stringifyCsv(HEADERS.routeResults, [partialRow]),
+    );
+
+    assert.deepEqual(readRouteResults({ repoRoot: repo }).map((row) => row.run_id), ['legacy']);
+  });
+
+  it('rewrites only the daily shard affected by an incremental run update', () => {
+    const repo = createTempRepo();
+    const passed = extractRouteResultsFromJobLog(routeMetricLogLine({ outcome: 'passed' }), {
+      platform: 'macos',
+    });
+    const dayTwoRun = {
+      ...baseRun(),
+      run_id: 'day-two',
+      started_at: '2026-07-08T00:30:00.000Z',
+      completed_at: '2026-07-08T01:00:00.000Z',
+    };
+
+    updateMetricsBatch({
+      repoRoot: repo,
+      updates: [
+        { reports: [], results: passed, run: { ...baseRun(), run_id: 'day-one' } },
+        { reports: [], results: passed, run: dayTwoRun },
+      ],
+    });
+
+    const failed = extractRouteResultsFromJobLog(
+      routeMetricLogLine({ outcome: 'failed', attempt_failures: 1 }),
+      { platform: 'macos' },
+    );
+    const summary = updateMetrics({ repoRoot: repo, reports: [], results: failed, run: dayTwoRun });
+
+    assert.deepEqual(summary.routeResultFilesWritten, ['data/route_results/2026-07-08.csv']);
+    assert.deepEqual(
+      readRouteResults({ repoRoot: repo }).map((row) => `${row.run_id}:${row.outcome}`),
+      ['day-one:passed', 'day-two:failed'],
+    );
+  });
+
+  it('defers aggregate recomputation across backfill batches until explicitly requested', () => {
+    const repo = createTempRepo();
+    const passed = extractRouteResultsFromJobLog(routeMetricLogLine({ outcome: 'passed' }), {
+      platform: 'macos',
+    });
+
+    updateMetricsBatch({
+      repoRoot: repo,
+      updates: [{ reports: [], results: passed, run: baseRun() }],
+      recomputeAggregates: false,
+    });
+
+    assert.deepEqual(readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats), []);
+    recomputeAggregateTables({ repoRoot: repo });
+    assert.equal(readTable(path.join(repo, 'data', 'route_stats.csv'), HEADERS.routeStats).length, 1);
   });
 
   it('preserves complete platform results when a rerun is partial or artifact-only', () => {
@@ -600,7 +708,7 @@ describe('E2E CI metrics core', () => {
     );
     updateMetrics({ repoRoot: repo, reports: [], results: partialMac, run: baseRun() });
 
-    const results = readTable(path.join(repo, 'data', 'route_results.csv'), HEADERS.routeResults);
+    const results = readRouteResults({ repoRoot: repo });
     assert.deepEqual(
       results.map((row) => pick(row, ['platform', 'outcome', 'data_source'])),
       [
@@ -632,7 +740,7 @@ describe('E2E CI metrics core', () => {
     update();
 
     const routes = readTable(path.join(repo, 'data', 'routes.csv'), HEADERS.routes);
-    const results = readTable(path.join(repo, 'data', 'route_results.csv'), HEADERS.routeResults);
+    const results = readRouteResults({ repoRoot: repo });
 
     assert.equal(routes.length, 1);
     assert.equal(routes[0].module_tags, 'chat;keyboard-shortcuts');

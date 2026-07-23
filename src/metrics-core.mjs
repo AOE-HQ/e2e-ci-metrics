@@ -2,6 +2,17 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { parseCsv, readTable, stringifyCsv, writeTable } from './csv-table.mjs';
+import {
+  ROUTE_RESULT_HEADERS,
+  ensureRouteResultsSharded,
+  readRouteResults,
+  routeResultDay,
+  writeRouteResults,
+} from './route-results-store.mjs';
+
+export { parseCsv, readTable, stringifyCsv, writeTable } from './csv-table.mjs';
+
 export const HEADERS = {
   routes: [
     'route_id',
@@ -27,20 +38,7 @@ export const HEADERS = {
     'conclusion',
     'data_source',
   ],
-  routeResults: [
-    'run_id',
-    'run_attempt',
-    'platform',
-    'project',
-    'route_id',
-    'outcome',
-    'duration_ms',
-    'retry_count',
-    'attempt_failures',
-    'error_signature',
-    'artifact_url',
-    'data_source',
-  ],
+  routeResults: ROUTE_RESULT_HEADERS,
   routeStats: [
     'route_id',
     'module_tags',
@@ -178,89 +176,6 @@ const MODULE_TAG_RULES = [
   ],
   ['tools', ['tools*']],
 ];
-
-export function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    const next = text[i + 1];
-
-    if (inQuotes) {
-      if (char === '"' && next === '"') {
-        field += '"';
-        i += 1;
-      } else if (char === '"') {
-        inQuotes = false;
-      } else {
-        field += char;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inQuotes = true;
-    } else if (char === ',') {
-      row.push(field);
-      field = '';
-    } else if (char === '\n') {
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else if (char !== '\r') {
-      field += char;
-    }
-  }
-
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-
-  return rows.filter((candidate) => candidate.some((value) => value !== ''));
-}
-
-export function stringifyCsv(headers, rows) {
-  const lines = [headers.map(escapeCsvField).join(',')];
-  for (const row of rows) {
-    lines.push(headers.map((header) => escapeCsvField(row[header] ?? '')).join(','));
-  }
-  return `${lines.join('\n')}\n`;
-}
-
-export function readTable(filePath, headers) {
-  if (!existsSync(filePath)) {
-    return [];
-  }
-
-  const parsed = parseCsv(readFileSync(filePath, 'utf8'));
-  if (parsed.length === 0) {
-    return [];
-  }
-
-  const [actualHeaders, ...records] = parsed;
-  const effectiveHeaders = actualHeaders.length > 0 ? actualHeaders : headers;
-  return records.map((record) => {
-    const row = {};
-    effectiveHeaders.forEach((header, index) => {
-      row[header] = record[index] ?? '';
-    });
-    for (const header of headers) {
-      row[header] ??= '';
-    }
-    return row;
-  });
-}
-
-export function writeTable(filePath, headers, rows) {
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  const sortedRows = [...rows];
-  writeFileSync(filePath, stringifyCsv(headers, sortedRows), 'utf8');
-}
 
 export function discoverReports(reportsDir) {
   if (!reportsDir || !existsSync(reportsDir)) {
@@ -672,18 +587,27 @@ export function updateMetrics({ repoRoot, reports = [], results = [], run, artif
   });
 }
 
-export function updateMetricsBatch({ repoRoot, updates = [] }) {
+export function updateMetricsBatch({ repoRoot, updates = [], recomputeAggregates = true }) {
   ensureTables(repoRoot);
 
   const overrides = loadOverrides(repoRoot);
   const runsPath = path.join(repoRoot, 'data', 'runs.csv');
-  const routeResultsPath = path.join(repoRoot, 'data', 'route_results.csv');
   const routesPath = path.join(repoRoot, 'data', 'routes.csv');
   const routeStatsPath = path.join(repoRoot, 'data', 'route_stats.csv');
   const routePlatformStatsPath = path.join(repoRoot, 'data', 'route_platform_stats.csv');
 
   let runs = readTable(runsPath, HEADERS.runs);
-  let routeResults = readTable(routeResultsPath, HEADERS.routeResults);
+  ensureRouteResultsSharded({ repoRoot, runs });
+  const existingRunsByKey = new Map(runs.map((run) => [getRunKey(run), run]));
+  const affectedDays = new Set();
+  for (const update of updates) {
+    const existingRun = existingRunsByKey.get(getRunKey(update.run));
+    if (existingRun) {
+      affectedDays.add(routeResultDay(existingRun));
+    }
+    affectedDays.add(routeResultDay(normalizeRun({ ...existingRun, ...update.run })));
+  }
+  let routeResults = readRouteResults({ repoRoot, days: affectedDays });
   let routes = readTable(routesPath, HEADERS.routes);
   let routesUpdated = 0;
   let reportsRead = 0;
@@ -757,18 +681,27 @@ export function updateMetricsBatch({ repoRoot, updates = [] }) {
 
   runs.sort(compareRunRows);
   routeResults.sort(compareRouteResultRows);
-  const stats = computeRouteStats({ routes, routeResults, runs });
-  const platformStats = computeRoutePlatformStats({ routes, routeResults, runs });
 
   writeTable(runsPath, HEADERS.runs, runs);
-  writeTable(routeResultsPath, HEADERS.routeResults, routeResults);
+  const routeResultFilesWritten = writeRouteResults({
+    repoRoot,
+    rows: routeResults,
+    runs,
+    days: affectedDays,
+  });
   writeTable(routesPath, HEADERS.routes, routes);
-  writeTable(routeStatsPath, HEADERS.routeStats, stats);
-  writeTable(routePlatformStatsPath, HEADERS.routePlatformStats, platformStats);
+  if (recomputeAggregates) {
+    const allRouteResults = readRouteResults({ repoRoot });
+    const stats = computeRouteStats({ routes, routeResults: allRouteResults, runs });
+    const platformStats = computeRoutePlatformStats({ routes, routeResults: allRouteResults, runs });
+    writeTable(routeStatsPath, HEADERS.routeStats, stats);
+    writeTable(routePlatformStatsPath, HEADERS.routePlatformStats, platformStats);
+  }
 
   return {
     routesUpdated,
     reportsRead,
+    routeResultFilesWritten,
   };
 }
 
@@ -776,13 +709,12 @@ export function recomputeAggregateTables({ repoRoot }) {
   ensureTables(repoRoot);
 
   const runsPath = path.join(repoRoot, 'data', 'runs.csv');
-  const routeResultsPath = path.join(repoRoot, 'data', 'route_results.csv');
   const routesPath = path.join(repoRoot, 'data', 'routes.csv');
   const routeStatsPath = path.join(repoRoot, 'data', 'route_stats.csv');
   const routePlatformStatsPath = path.join(repoRoot, 'data', 'route_platform_stats.csv');
 
   const runs = readTable(runsPath, HEADERS.runs);
-  const routeResults = readTable(routeResultsPath, HEADERS.routeResults);
+  const routeResults = readRouteResults({ repoRoot });
   const routes = readTable(routesPath, HEADERS.routes);
 
   writeTable(routeStatsPath, HEADERS.routeStats, computeRouteStats({ routes, routeResults, runs }));
@@ -838,7 +770,6 @@ function ensureTables(repoRoot) {
   const files = [
     ['data/routes.csv', HEADERS.routes],
     ['data/runs.csv', HEADERS.runs],
-    ['data/route_results.csv', HEADERS.routeResults],
     ['data/route_stats.csv', HEADERS.routeStats],
     ['data/route_platform_stats.csv', HEADERS.routePlatformStats],
     ['config/route-module-overrides.csv', HEADERS.overrides],
@@ -1304,14 +1235,6 @@ function matchesGlob(value, pattern) {
     .replace(/\*/g, '.*')
     .replace(/\?/g, '.');
   return new RegExp(`^${escaped}$`).test(value);
-}
-
-function escapeCsvField(value) {
-  const stringValue = String(value ?? '');
-  if (/[",\r\n]/.test(stringValue)) {
-    return `"${stringValue.replace(/"/g, '""')}"`;
-  }
-  return stringValue;
 }
 
 function getRunKey(row) {
