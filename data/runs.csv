@@ -4260,7 +4260,9 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29927052394,1,5831,CI,fix/20260618-0529,053b24c38752486acd6c8d4dca85d341d202db30,pull_request,1921,2026-07-22T14:07:22Z,2026-07-22T15:15:43Z,failure,job_log_failure_summary
 29928677052,1,5835,CI,fix/20260722-0440,abd86a4a6a11589ccb1bf7277c0cf3525bb4c0ba,pull_request,,2026-07-22T14:27:29Z,2026-07-22T15:41:37Z,success,job_log_failure_summary;job_log_route_metric
 29927315809,1,5833,CI,test/long-chat-5000-characterization,9353da5aa449a86608c839cee179a986621368e2,pull_request,1960,2026-07-22T14:10:38Z,2026-07-22T15:42:13Z,cancelled,job_log_failure_summary
+29928395202,1,5834,CI,fix/20260722-0863,c3262e53cafe459776f411fdc11a381f87b1d8b2,pull_request,1980,2026-07-22T14:23:56Z,2026-07-22T15:50:28Z,failure,job_log_failure_summary
 29929022968,1,5836,CI,fix/schedule-detail-overflow,2adab111d2cd64524400ccdeed874397a36b64da,pull_request,,2026-07-22T14:31:44Z,2026-07-22T16:08:59Z,failure,job_log_failure_summary
+29928395202,2,5834,CI,fix/20260722-0863,c3262e53cafe459776f411fdc11a381f87b1d8b2,pull_request,1980,2026-07-22T15:55:22Z,2026-07-22T16:12:23Z,failure,job_log_failure_summary
 29927052394,2,5831,CI,fix/20260618-0529,053b24c38752486acd6c8d4dca85d341d202db30,pull_request,1921,2026-07-22T15:47:22Z,2026-07-22T16:15:18Z,failure,job_log_failure_summary
 29927213982,1,5832,CI,fix/20260710-0744,9b16fc62909ddb8640bfa425736a0d32990b2f04,pull_request,1910,2026-07-22T14:09:25Z,2026-07-22T16:17:35Z,success,job_log_failure_summary;job_log_route_metric
 29929211003,1,5837,CI,fix/20260722-0828,4a55e8bda631dd01a627acb4e07ba781bbb5f3c7,pull_request,,2026-07-22T14:34:05Z,2026-07-22T16:22:36Z,success,job_log_failure_summary
@@ -4278,6 +4280,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29936742887,2,5842,CI,fix/schedule-detail-overflow,b374980b9a799f24d21c747d0d267489e18a98dd,pull_request,,2026-07-22T17:02:49Z,2026-07-22T18:36:14Z,success,job_log_failure_summary
 29934667372,2,5841,CI,fix/20260713-0777,cbc7425a14487e97754a28bc77cbf17512d1dac2,pull_request,,2026-07-22T17:03:48Z,2026-07-22T18:37:02Z,success,job_log_failure_summary;job_log_route_metric
 29930694757,3,5838,CI,fix/zhanxue,73a739a5c801530bead6fd1451f39b4f954ce239,pull_request,,2026-07-22T18:01:32Z,2026-07-22T18:41:45Z,success,job_log_failure_summary
+29949776445,1,5847,CI,fix/20260720-0860,42e18541bacd0080575791503fb5b305b0df6e86,pull_request,1992,2026-07-22T19:09:28Z,2026-07-22T19:17:39Z,failure,job_log_route_metric
 29943881841,1,5844,CI,fix/20260723-0857,7fd26a5f6bcc989d2184aa4bced4b8c3ae6e58b5,pull_request,,2026-07-22T17:47:51Z,2026-07-22T19:20:56Z,success,job_log_failure_summary;job_log_route_metric
 29945031041,1,5845,CI,fix/20260723-0850,c68a4633870b0fe24b04ef3b22a0622558a050e3,pull_request,1991,2026-07-22T18:03:38Z,2026-07-22T19:38:12Z,success,job_log_failure_summary;job_log_route_metric
 29948636343,1,5846,CI,codex/e2e-worker-reuse,a62fd44d834006c5be145ce9ab5ced071a4530d5,pull_request,,2026-07-22T18:53:23Z,2026-07-22T19:47:24Z,cancelled,job_log_failure_summary
@@ -4309,3 +4312,16 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 29977264902,1,5871,CI,dev,2c593813da6feea78f2370ac47e7ba8128a7ce60,push,,2026-07-23T03:32:40Z,2026-07-23T03:47:01Z,cancelled,unavailable_job_log
 29977852920,1,5874,CI,dev,cfb33d9a3f6bc81f14c27d8c94fa06a240b2944f,push,,2026-07-23T03:46:33Z,2026-07-23T03:47:48Z,cancelled,unavailable_job_log
 29977901677,1,5875,CI,dev,2a26fcb3469f5eb9bc5899d65f58662b263efc2f,push,,2026-07-23T03:47:47Z,2026-07-23T03:48:57Z,cancelled,unavailable_job_log
+29973449110,1,5859,CI,fix/20260723-0840,c446f040ab6ceb08b849f4c4050cc2fd20c16c69,pull_request,2001,2026-07-23T02:04:30Z,2026-07-23T03:50:48Z,success,job_log_failure_summary
+29928395202,3,5834,CI,fix/20260722-0863,c3262e53cafe459776f411fdc11a381f87b1d8b2,pull_request,1980,2026-07-23T03:02:33Z,2026-07-23T04:06:14Z,success,job_log_failure_summary;job_log_route_metric
+29949776445,2,5847,CI,fix/20260720-0860,42e18541bacd0080575791503fb5b305b0df6e86,pull_request,1992,2026-07-23T03:29:43Z,2026-07-23T04:10:55Z,cancelled,unavailable_job_log
+29974589517,1,5860,CI,fix/20260723-0845,347d8248af988f82a666e3c40e5ce440d1e4877a,pull_request,2002,2026-07-23T02:30:39Z,2026-07-23T04:15:21Z,success,job_log_failure_summary;job_log_route_metric
+29977075911,1,5868,CI,fix/20260723-0833,06c1b00cd07b39e8706aaaabfa845051575b01ef,pull_request,1996,2026-07-23T03:28:19Z,2026-07-23T04:16:49Z,failure,job_log_failure_summary
+29977613124,1,5872,CI,test/long-chat-5000-characterization,1541126a651dd329770d864c5999fc6722ccf180,pull_request,1960,2026-07-23T03:40:55Z,2026-07-23T04:18:30Z,cancelled,unavailable_job_log
+29977017970,1,5866,CI,fix/20260723-0867,27947445fd6c66edcf905b283d2638842d7b5223,pull_request,1998,2026-07-23T03:26:55Z,2026-07-23T05:01:08Z,success,job_log_failure_summary;job_log_route_metric
+29977980739,1,5877,CI,fix/20260702-0651,7b28c916fdc2afaa10b13f078a1156a93c3f5190,pull_request,1903,2026-07-23T03:49:44Z,2026-07-23T05:03:37Z,failure,job_log_failure_summary
+29978193160,1,5878,CI,fix/20260723-0854,48b4038d668cb4c55cbeefc6c5fe3c4fff8caf27,pull_request,2004,2026-07-23T03:54:47Z,2026-07-23T05:07:26Z,failure,job_log_failure_summary
+29980844757,1,5883,CI,fix/e2e-runner-failure-propagation,8cadc794b81e93344b6c2f5cf27f2d8539577dcc,pull_request,2007,2026-07-23T04:57:04Z,2026-07-23T05:08:28Z,cancelled,unavailable_job_log
+29981343030,1,5884,CI,fix/e2e-runner-failure-propagation,175f8f994ba334412d01440dff22f223df311992,pull_request,2007,2026-07-23T05:08:14Z,2026-07-23T05:12:39Z,cancelled,unavailable_job_log
+29977948084,1,5876,CI,dev,e8c02ae0749d8b3986faf5477a6379abc3915f6d,push,,2026-07-23T03:48:55Z,2026-07-23T05:28:57Z,failure,job_log_failure_summary
+29977761262,1,5873,CI,fix/20260710-0744,e15dff3e9de43a2e9b554fce09505c45ad979a08,pull_request,1910,2026-07-23T03:44:24Z,2026-07-23T05:30:28Z,success,job_log_failure_summary
