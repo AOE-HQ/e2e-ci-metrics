@@ -1029,6 +1029,263 @@ export function computeWindowedMetrics({ routes, routeResults, runs, asOf, windo
   return { asOf: new Date(asOfTime).toISOString(), windows: output };
 }
 
+export function createWindowedMetricsAccumulator({ routes, runs, asOf, windows }) {
+  const asOfTime = new Date(asOf).getTime();
+  if (!Number.isFinite(asOfTime)) {
+    throw new Error(`Invalid metrics window asOf timestamp: ${asOf}`);
+  }
+
+  const routeById = new Map(routes.map((route) => [route.route_id, route]));
+  const runByKey = new Map(
+    runs.map((run) => [
+      getRunKey(run),
+      {
+        completedAt: String(run.completed_at ?? ''),
+        completedAtTime: new Date(run.completed_at).getTime(),
+      },
+    ]),
+  );
+  const seenWindowKeys = new Set();
+  const windowStates = windows.map((window) => {
+    const key = String(window.key ?? '');
+    const durationMs = Number(window.durationMs);
+    if (!key || !Number.isFinite(durationMs) || durationMs <= 0) {
+      throw new Error(`Invalid metrics window definition: ${JSON.stringify(window)}`);
+    }
+    if (seenWindowKeys.has(key)) {
+      throw new Error(`Duplicate metrics window key: ${key}`);
+    }
+    seenWindowKeys.add(key);
+    return {
+      key,
+      sinceTime: asOfTime - durationMs,
+      routeStats: new Map(),
+      routePlatformStats: new Map(),
+    };
+  });
+  let sequence = 0;
+
+  const addResult = (result) => {
+    if (!isLogSignal(result)) {
+      return;
+    }
+    const runKey = getRunKey(result);
+    const run = runByKey.get(runKey);
+    if (!run || !Number.isFinite(run.completedAtTime)) {
+      return;
+    }
+    sequence += 1;
+    for (const state of windowStates) {
+      if (run.completedAtTime < state.sinceTime || run.completedAtTime > asOfTime) {
+        continue;
+      }
+      addMetricAggregate({
+        aggregates: state.routeStats,
+        key: String(result.route_id ?? ''),
+        result,
+        run,
+        runKey,
+        sequence,
+      });
+      addMetricAggregate({
+        aggregates: state.routePlatformStats,
+        key: `${result.route_id ?? ''}\0${result.platform ?? ''}`,
+        result,
+        run,
+        runKey,
+        sequence,
+      });
+    }
+  };
+
+  return {
+    addResult,
+    addResults(routeResults) {
+      for (const result of routeResults) {
+        addResult(result);
+      }
+    },
+    finish() {
+      const output = {};
+      for (const state of windowStates) {
+        output[state.key] = {
+          since: new Date(state.sinceTime).toISOString(),
+          routeStats: finalizeRouteAggregates(state.routeStats, routeById),
+          routePlatformStats: finalizeRoutePlatformAggregates(
+            state.routePlatformStats,
+            routeById,
+          ),
+        };
+      }
+      return { asOf: new Date(asOfTime).toISOString(), windows: output };
+    },
+  };
+}
+
+function addMetricAggregate({ aggregates, key, result, run, runKey, sequence }) {
+  const aggregate = aggregates.get(key) ?? createMetricAggregate(result);
+  const outcome = String(result.outcome ?? '');
+  const fullObservation = isFullObservation(result);
+  const nonSkipped = outcome !== 'skipped';
+
+  if (nonSkipped) {
+    aggregate.totalRuns += 1;
+    aggregate.logSignals += 1;
+    if (fullObservation) {
+      aggregate.fullRuns += 1;
+    }
+  }
+  if (outcome === 'failed') {
+    aggregate.failed += 1;
+    aggregate.logFailed += 1;
+    if (fullObservation) {
+      aggregate.fullFailed += 1;
+    }
+    if (result.platform === 'macos') {
+      aggregate.failedMacos += 1;
+    }
+    if (result.platform === 'windows') {
+      aggregate.failedWindows += 1;
+    }
+  }
+  if (outcome === 'flaky') {
+    aggregate.flaky += 1;
+    aggregate.logFlaky += 1;
+    if (fullObservation) {
+      aggregate.fullFlaky += 1;
+    }
+  }
+  aggregate.attemptFailures += Number(result.attempt_failures || 0);
+  aggregate.latest = laterMetricResult(aggregate.latest, {
+    completedAt: run.completedAt,
+    runKey,
+    sequence,
+    outcome,
+  });
+  if (outcome === 'failed') {
+    aggregate.latestFailed = laterMetricResult(aggregate.latestFailed, {
+      completedAt: run.completedAt,
+      runKey,
+      sequence,
+      outcome,
+    });
+  }
+  if (result.error_signature) {
+    aggregate.errorCounts.set(
+      result.error_signature,
+      (aggregate.errorCounts.get(result.error_signature) ?? 0) + 1,
+    );
+  }
+  aggregates.set(key, aggregate);
+}
+
+function createMetricAggregate(result) {
+  return {
+    routeId: String(result.route_id ?? ''),
+    platform: String(result.platform ?? ''),
+    totalRuns: 0,
+    fullRuns: 0,
+    fullFailed: 0,
+    fullFlaky: 0,
+    logSignals: 0,
+    logFailed: 0,
+    logFlaky: 0,
+    failed: 0,
+    flaky: 0,
+    failedMacos: 0,
+    failedWindows: 0,
+    attemptFailures: 0,
+    latest: null,
+    latestFailed: null,
+    errorCounts: new Map(),
+  };
+}
+
+function laterMetricResult(current, candidate) {
+  if (!current) {
+    return candidate;
+  }
+  const completedAtOrder = candidate.completedAt.localeCompare(current.completedAt);
+  if (completedAtOrder !== 0) {
+    return completedAtOrder > 0 ? candidate : current;
+  }
+  const runKeyOrder = candidate.runKey.localeCompare(current.runKey);
+  if (runKeyOrder !== 0) {
+    return runKeyOrder > 0 ? candidate : current;
+  }
+  return candidate.sequence > current.sequence ? candidate : current;
+}
+
+function finalizeRouteAggregates(aggregates, routeById) {
+  return [...aggregates.values()]
+    .map((aggregate) => ({
+      route_id: aggregate.routeId,
+      module_tags: routeById.get(aggregate.routeId)?.module_tags ?? '',
+      total_runs: String(aggregate.totalRuns),
+      full_runs: String(aggregate.fullRuns),
+      full_failed_runs: String(aggregate.fullFailed),
+      full_flaky_runs: String(aggregate.fullFlaky),
+      log_signal_runs: String(aggregate.logSignals),
+      log_failed_runs: String(aggregate.logFailed),
+      log_flaky_runs: String(aggregate.logFlaky),
+      failed_runs: String(aggregate.failed),
+      flaky_runs: String(aggregate.flaky),
+      attempt_failures: String(aggregate.attemptFailures),
+      pass_rate:
+        aggregate.fullRuns === 0
+          ? ''
+          : (
+              (aggregate.fullRuns - aggregate.fullFailed - aggregate.fullFlaky) /
+              aggregate.fullRuns
+            ).toFixed(4),
+      failed_runs_macos: String(aggregate.failedMacos),
+      failed_runs_windows: String(aggregate.failedWindows),
+      last_outcome: aggregate.latest?.outcome ?? '',
+      last_failed_at: aggregate.latestFailed?.completedAt ?? '',
+      top_error_signature: topErrorSignatureFromCounts(aggregate.errorCounts),
+    }))
+    .sort((left, right) => left.route_id.localeCompare(right.route_id));
+}
+
+function finalizeRoutePlatformAggregates(aggregates, routeById) {
+  return [...aggregates.values()]
+    .map((aggregate) => ({
+      route_id: aggregate.routeId,
+      platform: aggregate.platform,
+      module_tags: routeById.get(aggregate.routeId)?.module_tags ?? '',
+      total_runs: String(aggregate.totalRuns),
+      full_runs: String(aggregate.fullRuns),
+      full_failed_runs: String(aggregate.fullFailed),
+      full_flaky_runs: String(aggregate.fullFlaky),
+      log_signal_runs: String(aggregate.logSignals),
+      log_failed_runs: String(aggregate.logFailed),
+      log_flaky_runs: String(aggregate.logFlaky),
+      failed_runs: String(aggregate.failed),
+      flaky_runs: String(aggregate.flaky),
+      attempt_failures: String(aggregate.attemptFailures),
+      pass_rate:
+        aggregate.fullRuns === 0
+          ? ''
+          : (
+              (aggregate.fullRuns - aggregate.fullFailed - aggregate.fullFlaky) /
+              aggregate.fullRuns
+            ).toFixed(4),
+      last_outcome: aggregate.latest?.outcome ?? '',
+      last_failed_at: aggregate.latestFailed?.completedAt ?? '',
+      top_error_signature: topErrorSignatureFromCounts(aggregate.errorCounts),
+    }))
+    .sort(
+      (left, right) =>
+        left.route_id.localeCompare(right.route_id) || left.platform.localeCompare(right.platform),
+    );
+}
+
+function topErrorSignatureFromCounts(counts) {
+  return [...counts.entries()].sort(
+    (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+  )[0]?.[0] ?? '';
+}
+
 export function computeRouteStats({ routes, routeResults, runs }) {
   const routeById = new Map(routes.map((route) => [route.route_id, route]));
   const runByKey = new Map(runs.map((run) => [getRunKey(run), run]));

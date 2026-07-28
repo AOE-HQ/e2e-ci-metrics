@@ -167,6 +167,46 @@ test('the persisted checkpoint advances only after the inclusive backfill succee
   }
 });
 
+test('a bounded hourly batch persists the oldest backlog before newer runs', () => {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-bounded-'));
+  const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
+  mkdirSync(path.dirname(checkpointPath), { recursive: true });
+  writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  let backfillOptions;
+
+  try {
+    const result = runHourlyUpdate({
+      repository: checkpoint.repository,
+      workflow: checkpoint.workflow,
+      repoRoot,
+      checkpointPath,
+      snapshotAt: '2026-07-10T14:00:00.000Z',
+      maxRuns: 2,
+      listRuns: () => [
+        workflowRun(100),
+        workflowRun(101),
+        workflowRun(102),
+        workflowRun(103),
+        workflowRun(104),
+      ],
+      runBackfill: (options) => {
+        backfillOptions = options;
+      },
+      loadRunSources: () =>
+        new Map([
+          ['101#1', 'job_log_route_metric'],
+          ['102#1', 'job_log_route_metric'],
+        ]),
+    });
+
+    assert.deepEqual(result.runIdsToSync, ['101', '102']);
+    assert.equal(result.nextCheckpoint.processed_through.run_id, '102');
+    assert.equal(backfillOptions.until, workflowRun(102).created_at);
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test('a failed backfill leaves the persisted checkpoint unchanged', () => {
   const repoRoot = mkdtempSync(path.join(os.tmpdir(), 'e2e-ci-hourly-update-failure-'));
   const checkpointPath = path.join(repoRoot, 'state', 'checkpoint.json');
@@ -387,6 +427,7 @@ test('the hourly workflow is a single serialized writer and explicitly redeploys
   assert.match(workflow, /cancel-in-progress: false/);
   assert.match(workflow, /secrets\.AOE_DESKTOP_READ_TOKEN/);
   assert.match(workflow, /--checkpoint state\/aoe-desktop-ci-checkpoint\.json/);
+  assert.match(workflow, /--max-runs 32/);
   assert.match(workflow, /state\/aoe-desktop-ci-checkpoint\.json/);
   assert.match(workflow, /data\/route_results\//);
   assert.doesNotMatch(workflow, /data\/route_results\.csv/);
@@ -395,6 +436,12 @@ test('the hourly workflow is a single serialized writer and explicitly redeploys
   assert.doesNotMatch(workflow, /tests\/pr-number-preservation\.test\.mjs/);
   assert.doesNotMatch(workflow, /tests\/route-failure-history\.test\.mjs/);
   assert.doesNotMatch(workflow, /^\s+push:/m);
+
+  const updateIndex = workflow.indexOf('Update completed AoE Desktop CI runs');
+  const commitIndex = workflow.indexOf('Commit and push updated metrics');
+  const buildIndex = workflow.indexOf('Build dashboard');
+  assert.ok(updateIndex < commitIndex, 'metrics must be updated before they are persisted');
+  assert.ok(commitIndex < buildIndex, 'metrics and checkpoint must be persisted before dashboard build');
 });
 
 function workflowRun(runNumber, overrides = {}) {

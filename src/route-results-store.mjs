@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
-import { readTable, writeTable } from './csv-table.mjs';
+import { iterateTable, readTable, writeTable } from './csv-table.mjs';
 
 export const ROUTE_RESULT_HEADERS = [
   'run_id',
@@ -31,6 +31,30 @@ export function readRouteResults({ repoRoot, days }) {
     return shardFiles.flatMap((filePath) => readTable(filePath, ROUTE_RESULT_HEADERS));
   }
   return [];
+}
+
+export function* readRouteResultShards({ repoRoot, days }) {
+  const legacy = legacyPath(repoRoot);
+  if (existsSync(legacy)) {
+    yield {
+      day: 'legacy',
+      filePath: legacy,
+      rows: iterateTable(legacy, ROUTE_RESULT_HEADERS),
+    };
+    return;
+  }
+
+  const selectedDays = days ? new Set(days) : null;
+  const shardFiles = listRouteResultShardFiles({ repoRoot }).filter(
+    (filePath) => !selectedDays || selectedDays.has(path.basename(filePath, '.csv')),
+  );
+  for (const filePath of shardFiles) {
+    yield {
+      day: path.basename(filePath, '.csv'),
+      filePath,
+      rows: iterateTable(filePath, ROUTE_RESULT_HEADERS),
+    };
+  }
 }
 
 export function ensureRouteResultsSharded({ repoRoot, runs }) {

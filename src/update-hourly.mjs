@@ -18,6 +18,7 @@ try {
     repoRoot,
     checkpointPath,
     retries: Number(args.retries ?? 3),
+    maxRuns: args['max-runs'] ? Number(args['max-runs']) : Infinity,
     snapshotAt: args['snapshot-at'] ?? new Date().toISOString(),
     dryRun: Boolean(args['dry-run']),
   });

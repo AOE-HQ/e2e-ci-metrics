@@ -52,7 +52,13 @@ export function listWorkflowRunsFromCheckpoint({
   return discovered.reverse();
 }
 
-export function planIncrementalSync({ checkpoint, runs, snapshotAt, isRunProcessed = () => true }) {
+export function planIncrementalSync({
+  checkpoint,
+  runs,
+  snapshotAt,
+  isRunProcessed = () => true,
+  maxRuns = Infinity,
+}) {
   const cursor = checkpoint.processed_through;
   const snapshot = new Date(snapshotAt);
   if (Number.isNaN(snapshot.getTime())) {
@@ -67,7 +73,9 @@ export function planIncrementalSync({ checkpoint, runs, snapshotAt, isRunProcess
     throw new Error(`Checkpoint run ${cursor.run_id} is missing from the incremental run window.`);
   }
 
-  const incrementalRuns = normalizedRuns.slice(checkpointIndex);
+  const allIncrementalRuns = normalizedRuns.slice(checkpointIndex);
+  const incrementalRuns = limitIncrementalRuns(allIncrementalRuns, cursor, maxRuns);
+  const truncated = incrementalRuns.length < allIncrementalRuns.length;
   const runsToSync = incrementalRuns.filter(
     (run) => run.status === 'completed' && isNewerThanCheckpoint(run, cursor),
   );
@@ -92,10 +100,13 @@ export function planIncrementalSync({ checkpoint, runs, snapshotAt, isRunProcess
   return {
     needsBackfill: runsToSync.length > 0,
     since: String(cursor.created_at),
-    until: snapshot.toISOString(),
+    until: truncated
+      ? new Date(incrementalRuns.at(-1).created_at).toISOString()
+      : snapshot.toISOString(),
     runIdsToSync: runsToSync.map((run) => run.run_id),
     runKeysToSync: runsToSync.map(runKey),
     blockedBy,
+    truncated,
     nextCheckpoint: frontier ? checkpointFromRun(checkpoint, frontier) : checkpoint,
   };
 }
@@ -107,6 +118,7 @@ export function runHourlyUpdate({
   checkpointPath,
   snapshotAt = new Date().toISOString(),
   retries = 3,
+  maxRuns = Infinity,
   dryRun = false,
   listRuns = listWorkflowRunsFromCheckpoint,
   runBackfill = executeBackfill,
@@ -114,7 +126,7 @@ export function runHourlyUpdate({
 }) {
   const checkpoint = readCheckpoint(checkpointPath, { repository, workflow });
   const runs = listRuns({ repository, workflow, checkpoint, retries });
-  const plan = planIncrementalSync({ checkpoint, runs, snapshotAt });
+  const plan = planIncrementalSync({ checkpoint, runs, snapshotAt, maxRuns });
 
   if (dryRun) {
     return { ...plan, checkpointUpdated: false, dryRun: true };
@@ -137,6 +149,7 @@ export function runHourlyUpdate({
         checkpoint,
         runs,
         snapshotAt,
+        maxRuns,
         isRunProcessed: (run) =>
           isPersistedRun(runSources.get(runKey(run))),
       })
@@ -187,6 +200,26 @@ function normalizeWorkflowRun(run) {
 
 function compareRuns(left, right) {
   return left.run_number - right.run_number || left.run_attempt - right.run_attempt;
+}
+
+function limitIncrementalRuns(runs, cursor, maxRuns) {
+  if (!Number.isFinite(Number(maxRuns))) {
+    return runs;
+  }
+  const limit = Math.max(1, Math.floor(Number(maxRuns)));
+  const selected = [];
+  let newerRuns = 0;
+
+  for (const run of runs) {
+    if (isNewerThanCheckpoint(run, cursor)) {
+      if (newerRuns >= limit) {
+        break;
+      }
+      newerRuns += 1;
+    }
+    selected.push(run);
+  }
+  return selected;
 }
 
 function isAtOrAfterCheckpoint(run, cursor) {

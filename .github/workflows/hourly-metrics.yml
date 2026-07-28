@@ -46,6 +46,7 @@ jobs:
           --repo AOE-HQ/aoe-desktop
           --workflow ci.yml
           --checkpoint state/aoe-desktop-ci-checkpoint.json
+          --max-runs 32
           --retries 3
 
       - name: Verify metrics and checkpoint behavior
@@ -56,9 +57,6 @@ jobs:
 
       - name: Verify data file sizes
         run: pnpm exec node src/check-data-file-sizes.mjs --root data --max-mib 95
-
-      - name: Build dashboard
-        run: pnpm build:pages
 
       - name: Commit and push updated metrics
         id: commit
@@ -95,6 +93,9 @@ jobs:
             git fetch origin main
             git rebase origin/main
           done
+
+      - name: Build dashboard
+        run: pnpm build:pages
 
       - name: Deploy the updated dashboard
         if: steps.commit.outputs.changed == 'true'

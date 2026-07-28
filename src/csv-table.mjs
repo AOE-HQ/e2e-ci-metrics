@@ -1,5 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
 export function parseCsv(text) {
   const rows = [];
@@ -76,6 +85,107 @@ export function readTable(filePath, headers) {
     }
     return row;
   });
+}
+
+export function* iterateTable(filePath, headers) {
+  if (!existsSync(filePath)) {
+    return;
+  }
+
+  const rows = iterateCsvFileRows(filePath);
+  const first = rows.next();
+  if (first.done) {
+    return;
+  }
+  const effectiveHeaders = first.value.length > 0 ? first.value : headers;
+
+  for (const record of rows) {
+    const row = {};
+    effectiveHeaders.forEach((header, index) => {
+      row[header] = record[index] ?? '';
+    });
+    for (const header of headers) {
+      row[header] ??= '';
+    }
+    yield row;
+  }
+}
+
+function* iterateCsvFileRows(filePath) {
+  const file = openSync(filePath, 'r');
+  const decoder = new StringDecoder('utf8');
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  let pendingQuote = false;
+
+  try {
+    for (const text of decodedFileChunks(file, buffer, decoder)) {
+      for (const char of text) {
+        if (inQuotes) {
+          if (pendingQuote) {
+            if (char === '"') {
+              field += '"';
+              pendingQuote = false;
+              continue;
+            }
+            inQuotes = false;
+            pendingQuote = false;
+          } else if (char === '"') {
+            pendingQuote = true;
+            continue;
+          } else {
+            field += char;
+            continue;
+          }
+        }
+
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          row.push(field);
+          field = '';
+        } else if (char === '\n') {
+          row.push(field);
+          if (row.some((value) => value !== '')) {
+            yield row;
+          }
+          row = [];
+          field = '';
+        } else if (char !== '\r') {
+          field += char;
+        }
+      }
+    }
+
+    if (pendingQuote) {
+      inQuotes = false;
+      pendingQuote = false;
+    }
+    if (field.length > 0 || row.length > 0) {
+      row.push(field);
+      if (row.some((value) => value !== '')) {
+        yield row;
+      }
+    }
+  } finally {
+    closeSync(file);
+  }
+}
+
+function* decodedFileChunks(file, buffer, decoder) {
+  while (true) {
+    const bytesRead = readSync(file, buffer, 0, buffer.length, null);
+    if (bytesRead === 0) {
+      break;
+    }
+    yield decoder.write(buffer.subarray(0, bytesRead));
+  }
+  const tail = decoder.end();
+  if (tail) {
+    yield tail;
+  }
 }
 
 export function writeTable(filePath, headers, rows) {

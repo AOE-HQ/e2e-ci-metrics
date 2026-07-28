@@ -1,39 +1,60 @@
 const FAILURE_HISTORY_SOURCES = new Set(['job_log_route_metric', 'job_log_failure_summary']);
 
 export function buildRouteFailureHistory({ runs = [], routeResults = [], generatedAt = '' } = {}) {
+  const accumulator = createRouteFailureHistoryAccumulator({ runs, generatedAt });
+  accumulator.addResults(routeResults);
+  return accumulator.finish();
+}
+
+export function createRouteFailureHistoryAccumulator({ runs = [], generatedAt = '' } = {}) {
   const runByKey = new Map(runs.map((run) => [runKey(run), run]));
   const routeGroups = new Map();
+  const addResult = (result) => addFailureResult({ result, runByKey, routeGroups });
 
-  for (const result of routeResults) {
-    if (result.outcome !== 'failed' || !FAILURE_HISTORY_SOURCES.has(result.data_source)) {
-      continue;
-    }
+  return {
+    addResult,
+    addResults(routeResults) {
+      for (const result of routeResults) {
+        addResult(result);
+      }
+    },
+    finish() {
+      return finalizeHistory({ generatedAt, routeGroups });
+    },
+  };
+}
 
-    const routeId = text(result.route_id);
-    const resultRunKey = runKey(result);
-    const run = runByKey.get(resultRunKey) ?? {};
-    const sha = text(run.sha);
-    const failureKey = sha ? `sha:${sha}` : `run:${resultRunKey}`;
-    const failures = routeGroups.get(routeId) ?? new Map();
-    const failure = failures.get(failureKey) ?? {
-      sha,
-      sort_key: failureKey,
-      runs: new Map(),
-    };
-    const failureRun = failure.runs.get(resultRunKey) ?? buildRun(run, result);
-    const platform = text(result.platform);
-    const existingPlatform = failureRun.platforms.get(platform);
-
-    failureRun.platforms.set(platform, {
-      platform,
-      artifact_url: preferredText(existingPlatform?.artifact_url, result.artifact_url),
-      error_signature: preferredText(existingPlatform?.error_signature, result.error_signature),
-    });
-    failure.runs.set(resultRunKey, failureRun);
-    failures.set(failureKey, failure);
-    routeGroups.set(routeId, failures);
+function addFailureResult({ result, runByKey, routeGroups }) {
+  if (result.outcome !== 'failed' || !FAILURE_HISTORY_SOURCES.has(result.data_source)) {
+    return;
   }
 
+  const routeId = text(result.route_id);
+  const resultRunKey = runKey(result);
+  const run = runByKey.get(resultRunKey) ?? {};
+  const sha = text(run.sha);
+  const failureKey = sha ? `sha:${sha}` : `run:${resultRunKey}`;
+  const failures = routeGroups.get(routeId) ?? new Map();
+  const failure = failures.get(failureKey) ?? {
+    sha,
+    sort_key: failureKey,
+    runs: new Map(),
+  };
+  const failureRun = failure.runs.get(resultRunKey) ?? buildRun(run, result);
+  const platform = text(result.platform);
+  const existingPlatform = failureRun.platforms.get(platform);
+
+  failureRun.platforms.set(platform, {
+    platform,
+    artifact_url: preferredText(existingPlatform?.artifact_url, result.artifact_url),
+    error_signature: preferredText(existingPlatform?.error_signature, result.error_signature),
+  });
+  failure.runs.set(resultRunKey, failureRun);
+  failures.set(failureKey, failure);
+  routeGroups.set(routeId, failures);
+}
+
+function finalizeHistory({ generatedAt, routeGroups }) {
   return {
     generated_at: text(generatedAt),
     routes: [...routeGroups.entries()]

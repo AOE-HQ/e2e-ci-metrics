@@ -2,8 +2,10 @@
 
 `.github/workflows/hourly-metrics.yml` checks AoE Desktop CI every hour at
 minute 17. It reads `state/aoe-desktop-ci-checkpoint.json`, imports completed
-runs from that run onward, verifies the generated metrics, and commits the CSV
-files and checkpoint together.
+runs from that run onward in batches of at most 32 newer runs, verifies the
+generated metrics, and commits the CSV files and checkpoint together. The data
+commit happens before the dashboard build, so a Pages build failure cannot
+force the next hourly run to replay an already-persisted backlog.
 
 The checkpoint contains `run_id`, `run_number`, and `run_attempt`. Its
 `created_at` value is only the inclusive GitHub query boundary; time alone is
@@ -20,6 +22,8 @@ manual `--refresh-source` run.
 Route-result details are stored in `data/route_results/YYYY-MM-DD.csv`. A
 normal update rewrites only affected UTC-day shards, while a historical
 backfill rebuilds aggregate tables once after all raw batches are persisted.
+Dashboard builds also parse route-result shards row by row instead of loading
+either a full shard or the complete history into one Node.js heap.
 The hourly workflow also rejects any file under `data/` larger than 95 MiB
 before attempting a Git push.
 
@@ -35,5 +39,6 @@ pnpm exec node src/update-hourly.mjs \
   --repo AOE-HQ/aoe-desktop \
   --workflow ci.yml \
   --checkpoint state/aoe-desktop-ci-checkpoint.json \
+  --max-runs 32 \
   --dry-run
 ```

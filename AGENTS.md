@@ -65,3 +65,6 @@
 - 处理数十万行数组时不要使用 `target.push(...largeArray)` 或其他大规模参数展开；V8 会因参数数量过大触发 `Maximum call stack size exceeded`。改用逐项循环、固定大小分块或流式累计。
 - 核对百 MB 级 CSV 时不要同时把旧文件和全部分片 `parseCsv` 成对象数组；对象膨胀可能超过 1.5 GB heap 并 OOM。优先使用流式行数/哈希校验、逐分片处理或外部排序，仅在受控小窗口内对象化。
 - 核对百 MB 级 CSV 时不要用 `parseCsv` 一次性对象化整文件，即使提高 Node heap 也可能 OOM；应使用 Python `csv.reader` 等流式读取。读取 `subprocess.Popen(..., stdout=PIPE)` 的 CSV 时，`Popen` 本身不支持 `newline` 参数，应保持二进制管道并用 `io.TextIOWrapper(stdout, encoding='utf-8', newline='')` 包装。
+- `gh run view --json` / `gh run view --log-failed` 也会在 GitHub API 或日志下载正常可用时瞬时返回 `EOF`。只读诊断必须对整次 `gh run view` 做有限次数重试；不要只给内部 `gh api` 加重试，也不要把单次 EOF 当成目标 run 不存在。
+- 即使 route results 已按日分片，40 MiB 左右的单个 shard 用 `readTable` / `parseCsv` 全量对象化仍可能在 1 GiB Node heap 下 OOM。Pages 构建必须逐行流式解析 shard；统计 manifest 行数也要按字节块计数，不能用 `readFileSync(...).split(...)` 再制造整文件副本。
+- 批量执行多个 `rg -F` 核对时，模式只要以 `-` 或 `--` 开头，每一条命令都仍须写成 `rg ... -- '<pattern>'`；`-F` 只关闭正则解析，不会关闭命令行选项解析。

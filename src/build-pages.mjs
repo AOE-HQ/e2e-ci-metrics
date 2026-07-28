@@ -1,10 +1,20 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  copyFileSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
-import { HEADERS, computeWindowedMetrics, readTable } from './metrics-core.mjs';
-import { buildRouteFailureHistory } from './route-failure-history.mjs';
-import { listRouteResultShardFiles, readRouteResults } from './route-results-store.mjs';
+import { HEADERS, createWindowedMetricsAccumulator, readTable } from './metrics-core.mjs';
+import { createRouteFailureHistoryAccumulator } from './route-failure-history.mjs';
+import { listRouteResultShardFiles, readRouteResultShards } from './route-results-store.mjs';
 
 const repoRoot = process.cwd();
 const distDir = path.join(repoRoot, 'dist');
@@ -29,9 +39,9 @@ for (const fileName of csvFiles) {
 const routeResultsManifest = copyRouteResultShards();
 
 const sourceData = readSourceData();
-const timeWindows = buildTimeWindowData(generatedAt, sourceData);
-const failureHistory = buildRouteFailureHistory({ ...sourceData, generatedAt });
-const failureHistoryManifest = writeFailureHistory(failureHistory);
+const derivedData = buildDerivedData(generatedAt, sourceData);
+const timeWindows = writeTimeWindowData(derivedData.metrics);
+const failureHistoryManifest = writeFailureHistory(derivedData.failureHistory);
 writeFileSync(path.join(distDir, '.nojekyll'), '');
 writeFileSync(
   path.join(distDir, 'manifest.json'),
@@ -56,7 +66,31 @@ function readSourceData() {
   return {
     routes: readTable(path.join(dataDir, 'routes.csv'), HEADERS.routes),
     runs: readTable(path.join(dataDir, 'runs.csv'), HEADERS.runs),
-    routeResults: readRouteResults({ repoRoot }),
+  };
+}
+
+function buildDerivedData(asOf, { routes, runs }) {
+  const metricsAccumulator = createWindowedMetricsAccumulator({
+    routes,
+    runs,
+    asOf,
+    windows: TIME_WINDOWS,
+  });
+  const failureHistoryAccumulator = createRouteFailureHistoryAccumulator({
+    runs,
+    generatedAt: asOf,
+  });
+
+  for (const shard of readRouteResultShards({ repoRoot })) {
+    for (const row of shard.rows) {
+      metricsAccumulator.addResult(row);
+      failureHistoryAccumulator.addResult(row);
+    }
+  }
+
+  return {
+    metrics: metricsAccumulator.finish(),
+    failureHistory: failureHistoryAccumulator.finish(),
   };
 }
 
@@ -67,14 +101,13 @@ function copyRouteResultShards() {
 
   for (const sourcePath of listRouteResultShardFiles({ repoRoot })) {
     const fileName = path.basename(sourcePath);
-    const content = readFileSync(sourcePath, 'utf8');
-    const lineCount = content.trim() ? content.trimEnd().split(/\r?\n/).length : 0;
+    const lineCount = countFileLines(sourcePath);
     copyFileSync(sourcePath, path.join(outputDirectory, fileName));
     files.push({
       date: path.basename(fileName, '.csv'),
       path: `data/route_results/${fileName}`,
       data_rows: Math.max(0, lineCount - 1),
-      size_bytes: Buffer.byteLength(content),
+      size_bytes: statSync(sourcePath).size,
     });
   }
 
@@ -85,6 +118,34 @@ function copyRouteResultShards() {
     shard_count: files.length,
     data_rows: files.reduce((total, file) => total + file.data_rows, 0),
   };
+}
+
+function countFileLines(filePath) {
+  const file = openSync(filePath, 'r');
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let lines = 0;
+  let bytesSeen = 0;
+  let lastByte = -1;
+
+  try {
+    while (true) {
+      const bytesRead = readSync(file, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) {
+        break;
+      }
+      bytesSeen += bytesRead;
+      lastByte = buffer[bytesRead - 1];
+      for (let index = 0; index < bytesRead; index += 1) {
+        if (buffer[index] === 10) {
+          lines += 1;
+        }
+      }
+    }
+  } finally {
+    closeSync(file);
+  }
+
+  return bytesSeen === 0 ? 0 : lines + (lastByte === 10 ? 0 : 1);
 }
 
 function writeFailureHistory(history) {
@@ -107,8 +168,7 @@ function writeFailureHistory(history) {
   return { index_file: `data/${indexFile}` };
 }
 
-function buildTimeWindowData(asOf, { routes, runs, routeResults }) {
-  const metrics = computeWindowedMetrics({ routes, routeResults, runs, asOf, windows: TIME_WINDOWS });
+function writeTimeWindowData(metrics) {
   const fileName = 'window_stats.json';
   writeFileSync(path.join(distDataDir, fileName), `${JSON.stringify(metrics)}\n`);
   return {
