@@ -5712,3 +5712,4 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 34805235566,1,7226,CI,fix/voice-recording-preview,147653b2e7e9d258c99e7ca794332fc19817691b,pull_request,2390,2026-09-14T04:13:30Z,2026-09-14T04:13:31Z,skipped,inspected_ci
 34807697540,1,7227,CI,fix/zhanxue,e291d037b05b42729e7eaf626fa79a3fb4d96618,pull_request,,2026-09-14T04:54:06Z,2026-09-14T05:37:10Z,success,inspected_ci
 34812595838,1,7228,CI,dev,2bf16953fddad94a85d22a5ce79e152a87216802,push,,2026-09-14T06:14:11Z,2026-09-14T06:56:18Z,failure,unavailable_job_log
+36737882740,1,7567,CI,dependabot/npm_and_yarn/undici-8.10.2,293e00a74dedde001d23f7ddebe718a78bbfcba4,pull_request,2492,2026-09-30T15:35:21Z,2026-09-30T15:35:31Z,skipped,inspected_ci
