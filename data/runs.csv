@@ -5673,7 +5673,7 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 33753160773,1,7077,CI,dev,37ccac96b8077962709e73bbbdd78e89247073d6,push,,2026-09-03T12:04:31Z,2026-09-03T12:48:31Z,success,inspected_ci
 33743342629,2,7073,CI,fix/linux-deb-executable-name,99be5a54bf8ea8d8f4c63dbfbe639a8b8e072701,pull_request,,2026-09-03T12:22:27Z,2026-09-03T13:03:52Z,success,inspected_ci
 33755389387,1,7078,CI,fix/combo-recommended-fetch-error-card,5035a21dd8b6e2b222a9b49a1d5aec48f20078ca,pull_request,,2026-09-03T12:28:14Z,2026-09-03T13:17:35Z,failure,unavailable_job_log
-33759734722,1,7079,CI,fix/zhanxue,350548bae7c7ceb439625d59cb7a0cc89a277a59,pull_request,,2026-09-03T13:12:19Z,2026-09-03T13:56:42Z,success,inspected_ci
+33759734722,1,7079,CI,fix/zhanxue,350548bae7c7ceb439625d59cb7a0cc89a277a59,pull_request,2513,2026-09-03T13:12:19Z,2026-09-03T13:56:42Z,success,inspected_ci
 33755389387,2,7078,CI,fix/combo-recommended-fetch-error-card,5035a21dd8b6e2b222a9b49a1d5aec48f20078ca,pull_request,,2026-09-03T13:49:26Z,2026-09-03T14:15:07Z,success,inspected_ci
 33766148411,1,7081,CI,feat/workflow-local-http-trigger,83c286b9a09ab6cba34f859eb914230118aa0270,pull_request,,2026-09-03T14:19:16Z,2026-09-03T14:28:47Z,cancelled,unavailable_job_log
 33765058155,1,7080,CI,dev,4b9ec912c463c0195eba07330fff546ad74fd4cc,push,,2026-09-03T14:07:55Z,2026-09-03T14:44:33Z,cancelled,unavailable_job_log
