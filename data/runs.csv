@@ -6267,9 +6267,9 @@ run_id,run_attempt,run_number,workflow,branch,sha,event,pr_number,started_at,com
 36303938093,1,7562,CI,fix/20260925-1179,607fdd27f583a1525769739b3aa3934f2cb0fb20,workflow_dispatch,,2026-09-27T07:42:38Z,2026-09-27T10:57:18Z,success,inspected_ci
 36303891653,2,7555,CI,fix/20260924-1250,444e9cd59ee8b4aa6b7129bdcd9e5c416f400e74,workflow_dispatch,,2026-09-27T09:40:28Z,2026-09-27T11:13:36Z,success,inspected_ci
 36303906123,2,7558,CI,fix/20260925-0879,4ac9fc85e8666fe210bc622c397fbc5eb80fe0a8,workflow_dispatch,2485,2026-09-27T10:44:03Z,2026-09-27T11:15:29Z,success,inspected_ci
-36737882740,1,7567,CI,dependabot/npm_and_yarn/undici-8.10.2,293e00a74dedde001d23f7ddebe718a78bbfcba4,pull_request,2492,2026-09-30T15:35:21Z,2026-09-30T15:35:31Z,skipped,inspected_ci
+36737882740,1,7567,CI,dependabot/npm_and_yarn/undici-8.10.2,293e00a74dedde001d23f7ddebe718a78bbfcba4,pull_request,,2026-09-30T15:35:21Z,2026-09-30T15:35:31Z,skipped,inspected_ci
 37721409239,1,7568,CI,feat/floatboat-browser-indexed-actions,6c0229ad1a7f5471d9464a59d232c3761c109cb0,pull_request,,2026-10-08T03:09:54Z,2026-10-08T05:17:03Z,failure,unavailable_job_log
-37725702386,1,7569,CI,fix/zhanxue,849a65aa2e93dfc6afdb2ca8d6a7e5ca9291533f,pull_request,,2026-10-08T04:04:10Z,2026-10-08T05:21:40Z,success,inspected_ci
+37725702386,1,7569,CI,fix/zhanxue,849a65aa2e93dfc6afdb2ca8d6a7e5ca9291533f,pull_request,2618,2026-10-08T04:04:10Z,2026-10-08T05:21:40Z,success,inspected_ci
 37721409239,2,7568,CI,feat/floatboat-browser-indexed-actions,6c0229ad1a7f5471d9464a59d232c3761c109cb0,pull_request,,2026-10-08T05:33:56Z,2026-10-08T06:13:13Z,failure,unavailable_job_log
 37736147797,1,7570,CI,dev,01dc5032f4b096fa81a933ac4fd774e65a7d9491,push,,2026-10-08T06:10:14Z,2026-10-08T07:00:20Z,failure,unavailable_job_log
 37746468830,1,7572,CI,fix/stream-disconnect,d08462849fc0e55e07d8ef8586259bb3315cb1de,pull_request,,2026-10-08T07:55:30Z,2026-10-08T08:02:07Z,cancelled,unavailable_job_log
